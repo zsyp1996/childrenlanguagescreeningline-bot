@@ -1,5 +1,6 @@
 # 📌 1️⃣ **導入函式庫（Import Libraries）**
 import os
+import re
 from flask import Flask, request
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
