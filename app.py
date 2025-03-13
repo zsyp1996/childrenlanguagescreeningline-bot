@@ -98,24 +98,38 @@ def handle_follow(event):
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     """處理使用者輸入的文字訊息"""
-    user_message = event.message.text
+    user_message = event.message.text.strip()  # 去除空格
 
-    # **檢查是否為有效的出生日期**
-    child_age = calculate_age(user_message)
+    # 🔹 使用 GPT 解析日期格式
+    gpt_prompt = f"請將以下出生日期轉換為標準 YYYY-MM-DD 格式：{user_message}"
+    gpt_response = chat_with_gpt(gpt_prompt)  # 呼叫 GPT
 
-    if child_age is not None:
-        reply_text = f"你的孩子目前 {child_age} 個月大，請回答以下問題。"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
-        return  # ✅ 確保篩檢流程執行後結束函式
+    # 檢查 GPT 的回應是否符合 YYYY-MM-DD 格式
+    match = re.match(r"(\d{4})-(\d{2})-(\d{2})", gpt_response)
+    if match:
+        birth_date = datetime.strptime(gpt_response, "%Y-%m-%d").date()
+        today = datetime.today().date()
+        total_months = (today.year - birth_date.year) * 12 + (today.month - birth_date.month)
+
+        # 🔹 如果天數大於等於 30，則進一個月
+        if today.day - birth_date.day >= 30:
+            total_months += 1
+
+        # 🔹 限制施測年齡（不超過 36 個月）
+        if total_months > 36:
+            response_text = "本篩檢僅適用於三歲以下兒童，若您的孩子超過 36 個月，建議聯絡語言治療師進行進一步評估。"
+        else:
+            response_text = f"你的孩子目前 {total_months} 個月大，現在開始篩檢。"
 
     else:
-        reply = "❌ 請輸入正確的出生日期格式：`YYYY-MM-DD`，例如 **2020-08-15**。且孩子須滿至少一個月。"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-        return  # ✅ 確保錯誤訊息發送後函式結束，不進入 ChatGPT
+        # GPT 解析失敗，請使用者重新輸入
+        response_text = "請提供有效的出生日期（YYYY-MM-DD），例如 2020-08-15。"
 
-    # **若非日期，則傳送給 ChatGPT 處理**
-    reply = chat_with_gpt(user_message)  # ✅ 呼叫新版 OpenAI API
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+    # 🔹 回應使用者
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=response_text)
+    )
 
 # 📌 8️⃣ **啟動 Flask 應用**
 if __name__ == "__main__":
