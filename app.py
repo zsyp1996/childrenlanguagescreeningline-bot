@@ -151,14 +151,27 @@ def handle_message(event):
         today = datetime.today().date()
 
         # 計算實足月齡
-        total_months = calculate_age(str(birth_date))
+        total_months = (today.year - birth_date.year) * 12 + (today.month - birth_date.month)
 
-        response_text = f"你的孩子目前 {total_months} 個月大，現在開始篩檢。"
+        # 🔹 如果天數不足，減去一個月
+        if today.day < birth_date.day:
+            total_months -= 1
+
+        # 🔹 限制施測年齡（不超過 36 個月）
+        if total_months > 36:
+            response_text = "本篩檢僅適用於三歲以下兒童，若您的孩子超過 36 個月，建議聯絡語言治療師進行進一步評估。"
+        else:
+            response_text = f"你的孩子目前 {total_months} 個月大，現在開始篩檢。"
 
     else:
+        # GPT 解析失敗，請使用者重新輸入
         response_text = "若要進行語言篩檢，請提供有效的西元出生日期（YYYY-MM-DD），例如 2020-08-15。"
 
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+    # 🔹 回應使用者
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=response_text)
+    )
 
 # 📌 🔟 **啟動 Flask 應用**
 if __name__ == "__main__":
