@@ -2,6 +2,8 @@
 import os
 import re
 import gspread
+import json
+import base64
 from google.oauth2.service_account import Credentials
 from flask import Flask, request
 from linebot import LineBotApi, WebhookHandler
@@ -11,7 +13,6 @@ from openai import OpenAI  # 確保 import 最新的 OpenAI 函式庫
 from datetime import datetime, timedelta  # 🆕 計算年齡所需
 
 # 📌 2️⃣ **初始化 Flask 與 API 相關變數**
-# 使用環境變數來存 API Key
 LINE_ACCESS_TOKEN = os.getenv("LINE_ACCESS_TOKEN")
 LINE_SECRET = os.getenv("LINE_SECRET")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -23,19 +24,22 @@ handler = WebhookHandler(LINE_SECRET)
 # 初始化 OpenAI API
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# 📌 3️⃣ **連接 Google Sheets API**
+# 📌 3️⃣ **連接 Google Sheets API（使用 Base64 環境變數）**
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-SERVICE_ACCOUNT_FILE = "nomadic-poet-453614-i7-7cd943998049.json"  # 你的 JSON 憑證檔名稱
 
-# 建立憑證
-creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+# **從環境變數讀取 Base64 JSON 並解碼**
+service_account_json_base64 = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+if service_account_json_base64:
+    service_account_info = json.loads(base64.b64decode(service_account_json_base64))
+    creds = Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
+    gspread_client = gspread.authorize(creds)
 
-# 授權 Google Sheets API
-gspread_client = gspread.authorize(creds)
-
-# **設定試算表 ID**
-SPREADSHEET_ID = "1twgKpgWZIzzy7XoMg08jQfweJ2lP4S2LEcGGq-txMVk"
-sheet = gspread_client.open_by_key(SPREADSHEET_ID).sheet1  # 連接第一個工作表
+    # **設定試算表 ID**
+    SPREADSHEET_ID = "1twgKpgWZIzzy7XoMg08jQfweJ2lP4S2LEcGGq-txMVk"
+    sheet = gspread_client.open_by_key(SPREADSHEET_ID).sheet1  # 連接第一個工作表
+    print("✅ 成功連接 Google Sheets！")
+else:
+    print("❌ 無法獲取 GOOGLE_SERVICE_ACCOUNT_JSON，請確認環境變數是否正確設定！")
 
 # 📌 4️⃣ **測試是否成功讀取 Google Sheets**
 try:
@@ -115,7 +119,6 @@ def test_sheets():
     except Exception as e:
         return f"❌ 無法讀取 Google Sheets，錯誤訊息：{e}"
 
-
 # 📌 8️⃣ **處理使用者加入 Bot 時的回應**
 @handler.add(FollowEvent)
 def handle_follow(event):
@@ -135,7 +138,7 @@ def handle_message(event):
     user_message = event.message.text.strip()  # 去除空格
 
     # 🔹 讓 GPT 轉換日期格式
-    gpt_prompt = f"請只輸出這個出生日期的標準西元 YYYY-MM-DD 格式，不要有任何額外的解釋：{user_message}"
+    gpt_prompt = f"將這個日期(無論西元或民國年)轉為西元 YYYY-MM-DD 格式，請只輸出日期不要有任何額外的解釋：{user_message}"
     gpt_response = chat_with_gpt(gpt_prompt)  # 呼叫 GPT
     
     print("GPT 回應:", gpt_response)  # 🛠️ Debug，檢查 GPT 真的回應什麼
@@ -147,27 +150,14 @@ def handle_message(event):
         today = datetime.today().date()
 
         # 計算實足月齡
-        total_months = (today.year - birth_date.year) * 12 + (today.month - birth_date.month)
+        total_months = calculate_age(str(birth_date))
 
-        # 🔹 如果天數不足，減去一個月
-        if today.day < birth_date.day:
-            total_months -= 1
-
-        # 🔹 限制施測年齡（不超過 36 個月）
-        if total_months > 36:
-            response_text = "本篩檢僅適用於三歲以下兒童，若您的孩子超過 36 個月，建議聯絡語言治療師進行進一步評估。"
-        else:
-            response_text = f"你的孩子目前 {total_months} 個月大，現在開始篩檢。"
+        response_text = f"你的孩子目前 {total_months} 個月大，現在開始篩檢。"
 
     else:
-        # GPT 解析失敗，請使用者重新輸入
         response_text = "若要進行語言篩檢，請提供有效的西元出生日期（YYYY-MM-DD），例如 2020-08-15。"
 
-    # 🔹 回應使用者
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=response_text)
-    )
+    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
 
 # 📌 🔟 **啟動 Flask 應用**
 if __name__ == "__main__":
