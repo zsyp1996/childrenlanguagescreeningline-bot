@@ -131,8 +131,31 @@ def handle_follow(event):
         event.reply_token,
         TextSendMessage(text=welcome_message)
     )
+    
+# 🔹 讀取 Google Sheets 並篩選符合年齡的題目
+def get_questions_by_age(months):
+    """從 Google Sheets 讀取符合年齡的篩檢題目"""
+    try:
+        sheet_data = sheet.get_all_values()  # 讀取試算表
+        questions = []  # 存放符合條件的題目
 
-# 📌 9️⃣ **處理使用者訊息**
+        for row in sheet_data[1:]:  # 跳過標題列
+            age_range = row[0]  # 年齡區間（例如 "9-12 個月"）
+            question = row[2]  # 題目內容
+
+            # 檢查該題目是否符合目前的年齡
+            if "-" in age_range:
+                min_age, max_age = map(int, re.findall(r'\d+', age_range))
+                if min_age <= months <= max_age:
+                    questions.append(question)
+
+        return questions if questions else None  # 若沒有符合的題目則回傳 None
+    except Exception as e:
+        print("❌ 讀取 Google Sheets 失敗，錯誤訊息：", e)
+        return None
+
+
+# 🔹 修改 handle_message(event)
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     """處理使用者輸入的文字訊息"""
@@ -140,38 +163,33 @@ def handle_message(event):
 
     # 🔹 讓 GPT 轉換日期格式
     gpt_prompt = f"將這個日期(無論西元或民國年)轉為西元 YYYY-MM-DD 格式，請只輸出日期不要有任何額外的解釋：{user_message}"
-    gpt_response = chat_with_gpt(gpt_prompt)  # 呼叫 GPT
+    gpt_response = chat_with_gpt(gpt_prompt)  # 呼叫 GPT 轉換日期
     
-    print("GPT 回應:", gpt_response)  # 🛠️ Debug，檢查 GPT 真的回應什麼
+    print("GPT 回應:", gpt_response)  # 🛠️ Debug，檢查 GPT 回應
 
-    # 🔹 檢查 GPT 的回應是否符合 YYYY-MM-DD 格式
-    match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", gpt_response)  # 找到標準日期格式
+    # 🔹 檢查 GPT 是否正確解析日期
+    match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", gpt_response)
     if match:
         birth_date = datetime.strptime(match.group(0), "%Y-%m-%d").date()
-        today = datetime.today().date()
+        total_months = calculate_age(str(birth_date))  # 計算月齡
 
-        # 計算實足月齡
-        total_months = (today.year - birth_date.year) * 12 + (today.month - birth_date.month)
-
-        # 🔹 如果天數不足，減去一個月
-        if today.day < birth_date.day:
-            total_months -= 1
-
-        # 🔹 限制施測年齡（不超過 36 個月）
         if total_months > 36:
             response_text = "本篩檢僅適用於三歲以下兒童，若您的孩子超過 36 個月，建議聯絡語言治療師進行進一步評估。"
         else:
-            response_text = f"你的孩子目前 {total_months} 個月大，現在開始篩檢。"
+            # 🔹 根據月齡篩選 Google Sheets 題目
+            questions = get_questions_by_age(total_months)
+
+            if questions:
+                first_question = questions[0]  # 取得第一題
+                response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n\n第一題：{first_question}"
+            else:
+                response_text = "無法找到適合此年齡的篩檢題目，請確認 Google Sheets 設定是否正確。"
 
     else:
-        # GPT 解析失敗，請使用者重新輸入
         response_text = "若要進行語言篩檢，請提供有效的西元出生日期（YYYY-MM-DD），例如 2020-08-15。"
 
     # 🔹 回應使用者
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=response_text)
-    )
+    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
 
 # 📌 🔟 **啟動 Flask 應用**
 if __name__ == "__main__":
