@@ -1,6 +1,8 @@
 # 📌 1️⃣ **導入函式庫（Import Libraries）**
 import os
 import re
+import gspread
+from google.oauth2.service_account import Credentials
 from flask import Flask, request
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -21,10 +23,30 @@ handler = WebhookHandler(LINE_SECRET)
 # 初始化 OpenAI API
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# 啟動 Flask 應用
-app = Flask(__name__)
+# 📌 3️⃣ **連接 Google Sheets API**
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+SERVICE_ACCOUNT_FILE = "nomadic-poet-453614-i7-7cd943998049.json"  # 你的 JSON 憑證檔名稱
 
-# 📌 3️⃣ **計算年齡函式（用於判斷兒童月齡）**
+# 建立憑證
+creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+
+# 授權 Google Sheets API
+gspread_client = gspread.authorize(creds)
+
+# **設定試算表 ID**
+SPREADSHEET_ID = "1twgKpgWZIzzy7XoMg08jQfweJ2lP4S2LEcGGq-txMVk"
+sheet = gspread_client.open_by_key(SPREADSHEET_ID).sheet1  # 連接第一個工作表
+
+# 📌 4️⃣ **測試是否成功讀取 Google Sheets**
+try:
+    sheet_data = sheet.get_all_values()
+    print("✅ 成功連接 Google Sheets，內容如下：")
+    for row in sheet_data:
+        print(row)  # Debug：顯示試算表內容
+except Exception as e:
+    print("❌ 無法讀取 Google Sheets，錯誤訊息：", e)
+
+# 📌 5️⃣ **計算年齡函式（用於判斷兒童月齡）**
 def calculate_age(birthdate_str):
     """計算孩子的實足月齡（滿 30 天進位一個月）"""
     try:
@@ -52,7 +74,7 @@ def calculate_age(birthdate_str):
     except ValueError:
         return None
 
-# 📌 4️⃣ **與 OpenAI ChatGPT 互動的函式**
+# 📌 6️⃣ **與 OpenAI ChatGPT 互動的函式**
 def chat_with_gpt(prompt):
     """與 OpenAI ChatGPT 互動，確保 Bot 只回答篩檢問題"""
     response = client.chat.completions.create(
@@ -64,7 +86,7 @@ def chat_with_gpt(prompt):
     )
     return response.choices[0].message.content  # ✅ 正確回傳 ChatGPT 回應
 
-# 📌 5️⃣ **Flask 路由（API 入口點）**
+# 📌 7️⃣ **Flask 路由（API 入口點）**
 @app.route("/", methods=["GET"])
 def home():
     """首頁（測試用）"""
@@ -83,7 +105,18 @@ def callback():
 
     return "OK"
 
-# 📌 6️⃣ **處理使用者加入 Bot 時的回應**
+@app.route("/test_sheets", methods=["GET"])
+def test_sheets():
+    """測試 Google Sheets API 讀取資料"""
+    try:
+        sheet_data = sheet.get_all_values()  # 讀取試算表的所有內容
+        formatted_data = "\n".join([", ".join(row) for row in sheet_data])  # 轉換為可讀的字串格式
+        return f"✅ 成功讀取試算表內容：\n{formatted_data}"
+    except Exception as e:
+        return f"❌ 無法讀取 Google Sheets，錯誤訊息：{e}"
+
+
+# 📌 8️⃣ **處理使用者加入 Bot 時的回應**
 @handler.add(FollowEvent)
 def handle_follow(event):
     """使用者加入時，發送歡迎訊息並請求輸入孩子出生年月日"""
@@ -95,14 +128,14 @@ def handle_follow(event):
         TextSendMessage(text=welcome_message)
     )
 
-# 📌 7️⃣ **處理使用者訊息**
+# 📌 9️⃣ **處理使用者訊息**
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     """處理使用者輸入的文字訊息"""
     user_message = event.message.text.strip()  # 去除空格
 
     # 🔹 讓 GPT 轉換日期格式
-    gpt_prompt = f"請只輸出這個出生日期的標準 YYYY-MM-DD 格式，不要有任何額外的解釋：{user_message}"
+    gpt_prompt = f"請只輸出這個出生日期的標準西元 YYYY-MM-DD 格式，不要有任何額外的解釋：{user_message}"
     gpt_response = chat_with_gpt(gpt_prompt)  # 呼叫 GPT
     
     print("GPT 回應:", gpt_response)  # 🛠️ Debug，檢查 GPT 真的回應什麼
@@ -128,7 +161,7 @@ def handle_message(event):
 
     else:
         # GPT 解析失敗，請使用者重新輸入
-        response_text = "請提供有效的出生日期（YYYY-MM-DD），例如 2020-08-15。"
+        response_text = "若要進行語言篩檢，請提供有效的西元出生日期（YYYY-MM-DD），例如 2020-08-15。"
 
     # 🔹 回應使用者
     line_bot_api.reply_message(
@@ -136,6 +169,6 @@ def handle_message(event):
         TextSendMessage(text=response_text)
     )
 
-# 📌 8️⃣ **啟動 Flask 應用**
+# 📌 🔟 **啟動 Flask 應用**
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
