@@ -124,8 +124,14 @@ def test_sheets():
 @handler.add(FollowEvent)
 def handle_follow(event):
     """使用者加入時，發送歡迎訊息並請求輸入孩子出生年月日"""
-    welcome_message = """請提供孩子的西元出生年月日（YYYY-MM-DD），以便開始語言篩檢。
-本測驗僅供參考，最終結果仍需專業人員評估。如有疑問，請諮詢語言治療師。"""
+    welcome_message = """🎉 歡迎來到 **兒童語言篩檢 BOT**！
+請選擇您需要的功能，輸入對應的關鍵字開始：
+🔹 **篩檢** → 進行兒童語言發展篩檢
+🔹 **提升** → 獲取語言發展建議
+🔹 **我想治療** → 查找附近語言治療服務
+
+⚠️ 若要進行篩檢，請輸入「篩檢」開始測驗。
+⚠️ 若輸入其他內容，BOT 會重複此訊息。"""
     
     line_bot_api.reply_message(
         event.reply_token,
@@ -155,41 +161,93 @@ def get_questions_by_age(months):
         return None
 
 
-# 🔹 修改 handle_message(event)
+# 🔹 追蹤使用者狀態（模式），這裡用字典模擬（正式可用資料庫）
+user_states = {}
+
+# 🔹 定義不同模式
+MODE_MAIN_MENU = "主選單"
+MODE_SCREENING = "篩檢模式"
+MODE_TIPS = "語言發展建議模式"
+MODE_TREATMENT = "語言治療資訊模式"
+
+
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     """處理使用者輸入的文字訊息"""
+    user_id = event.source.user_id  # 取得使用者 ID
     user_message = event.message.text.strip()  # 去除空格
 
-    # 🔹 讓 GPT 轉換日期格式
-    gpt_prompt = f"將這個日期(無論西元或民國年)轉為西元 YYYY-MM-DD 格式，請只輸出日期不要有任何額外的解釋：{user_message}"
-    gpt_response = chat_with_gpt(gpt_prompt)  # 呼叫 GPT 轉換日期
-    
-    print("GPT 回應:", gpt_response)  # 🛠️ Debug，檢查 GPT 回應
+    # 🔹 檢查使用者狀態，預設為「主選單」
+    if user_id not in user_states:
+        user_states[user_id] = MODE_MAIN_MENU
 
-    # 🔹 檢查 GPT 是否正確解析日期
-    match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", gpt_response)
-    if match:
-        birth_date = datetime.strptime(match.group(0), "%Y-%m-%d").date()
-        total_months = calculate_age(str(birth_date))  # 計算月齡
+    user_mode = user_states[user_id]  # 取得使用者目前模式
 
-        if total_months > 36:
-            response_text = "本篩檢僅適用於三歲以下兒童，若您的孩子超過 36 個月，建議聯絡語言治療師進行進一步評估。"
+    # 🔹 主選單模式（只能輸入「篩檢」「提升」「我想治療」）
+    if user_mode == MODE_MAIN_MENU:
+        if user_message == "篩檢":
+            user_states[user_id] = MODE_SCREENING
+            response_text = "請提供孩子的西元出生年月日（YYYY-MM-DD），以便開始語言篩檢。"
+        elif user_message == "提升":
+            user_states[user_id] = MODE_TIPS
+            response_text = "幼兒語言發展建議：\n- 與孩子多對話，描述日常事物。\n- 用簡單但完整的句子與孩子交流。\n- 讀繪本、唱童謠、玩互動遊戲來促進語言學習。\n\n輸入「返回」回到主選單。"
+        elif user_message == "我想治療":
+            user_states[user_id] = MODE_TREATMENT
+            response_text = "語言治療機構資訊：請搜尋官方語言治療機構網站，或聯絡當地醫療院所。\n\n輸入「返回」回到主選單。"
         else:
-            # 🔹 根據月齡篩選 Google Sheets 題目
-            questions = get_questions_by_age(total_months)
+            response_text = (
+                "❌ 無效指令，請輸入：\n"
+                "- 「篩檢」開始語言篩檢\n"
+                "- 「提升」獲取語言發展建議\n"
+                "- 「我想治療」獲取語言治療資源"
+            )
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+        return
 
-            if questions:
-                first_question = questions[0]  # 取得第一題
-                response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n\n第一題：{first_question}"
+    # 🔹 語言發展建議 & 治療模式
+    if user_mode in [MODE_TIPS, MODE_TREATMENT]:
+        if user_message == "返回":
+            user_states[user_id] = MODE_MAIN_MENU
+            response_text = (
+                "✅ 已返回主選單。\n"
+                "- 「篩檢」開始語言篩檢\n"
+                "- 「提升」獲取語言發展建議\n"
+                "- 「我想治療」獲取語言治療資源"
+            )
+        else:
+            response_text = "輸入「返回」回到主選單。"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+        return
+
+    # 🔹 篩檢模式
+    if user_mode == MODE_SCREENING:
+        gpt_prompt = f"將這個日期(無論西元或民國年)轉為西元 YYYY-MM-DD 格式，請只輸出日期不要有任何額外的解釋：{user_message}"
+        gpt_response = chat_with_gpt(gpt_prompt)  # 呼叫 GPT 轉換日期
+
+        print("GPT 回應:", gpt_response)  # Debug，檢查 GPT 回應
+
+        match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", gpt_response)
+        if match:
+            birth_date = datetime.strptime(match.group(0), "%Y-%m-%d").date()
+            total_months = calculate_age(str(birth_date))  # 計算月齡
+
+            if total_months > 36:
+                response_text = "本篩檢僅適用於三歲以下兒童，若您的孩子超過 36 個月，建議聯絡語言治療師進行進一步評估。"
+                user_states[user_id] = MODE_MAIN_MENU  # 直接返回主選單
             else:
-                response_text = "無法找到適合此年齡的篩檢題目，請確認 Google Sheets 設定是否正確。"
+                questions = get_questions_by_age(total_months)
+                if questions:
+                    first_question = questions[0]
+                    response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n\n第一題：{first_question}"
+                    user_states[user_id] = "進行篩檢"
+                else:
+                    response_text = "無法找到適合此年齡的篩檢題目，請確認 Google Sheets 設定是否正確。"
+                    user_states[user_id] = MODE_MAIN_MENU
+        else:
+            response_text = "若要進行語言篩檢，請提供有效的西元出生日期（YYYY-MM-DD），例如 2020-08-15。"
 
-    else:
-        response_text = "若要進行語言篩檢，請提供有效的西元出生日期（YYYY-MM-DD），例如 2020-08-15。"
-
-    # 🔹 回應使用者
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+        return
 
 # 📌 🔟 **啟動 Flask 應用**
 if __name__ == "__main__":
