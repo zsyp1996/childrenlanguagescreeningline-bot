@@ -101,20 +101,24 @@ def handle_message(event):
     """處理使用者輸入的文字訊息"""
     user_message = event.message.text.strip()  # 去除空格
 
-    # 🔹 使用 GPT 解析日期格式
-    gpt_prompt = f"請將以下出生日期轉換為標準 YYYY-MM-DD 格式：{user_message}"
+    # 🔹 讓 GPT 轉換日期格式
+    gpt_prompt = f"請只輸出這個出生日期的標準 YYYY-MM-DD 格式，不要有任何額外的解釋：{user_message}"
     gpt_response = chat_with_gpt(gpt_prompt)  # 呼叫 GPT
+    
+    print("GPT 回應:", gpt_response)  # 🛠️ Debug，檢查 GPT 真的回應什麼
 
-    # 檢查 GPT 的回應是否符合 YYYY-MM-DD 格式
-    match = re.match(r"(\d{4})-(\d{2})-(\d{2})", gpt_response)
+    # 🔹 檢查 GPT 的回應是否符合 YYYY-MM-DD 格式
+    match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", gpt_response)  # 找到標準日期格式
     if match:
-        birth_date = datetime.strptime(gpt_response, "%Y-%m-%d").date()
+        birth_date = datetime.strptime(match.group(0), "%Y-%m-%d").date()
         today = datetime.today().date()
+
+        # 計算實足月齡
         total_months = (today.year - birth_date.year) * 12 + (today.month - birth_date.month)
 
-        # 🔹 如果天數大於等於 30，則進一個月
-        if today.day - birth_date.day >= 30:
-            total_months += 1
+        # 🔹 如果天數不足，減去一個月
+        if today.day < birth_date.day:
+            total_months -= 1
 
         # 🔹 限制施測年齡（不超過 36 個月）
         if total_months > 36:
