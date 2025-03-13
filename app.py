@@ -13,6 +13,7 @@ from openai import OpenAI  # 確保 import 最新的 OpenAI 函式庫
 from datetime import datetime, timedelta  # 🆕 計算年齡所需
 
 # 📌 2️⃣ **初始化 Flask 與 API 相關變數**
+app = Flask(__name__)
 LINE_ACCESS_TOKEN = os.getenv("LINE_ACCESS_TOKEN")
 LINE_SECRET = os.getenv("LINE_SECRET")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
