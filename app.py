@@ -171,6 +171,7 @@ MODE_TIPS = "語言發展建議模式"
 MODE_TREATMENT = "語言治療資訊模式"
 MODE_TESTING = "進行篩檢"
 
+@handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     """處理使用者輸入的文字訊息"""
     user_id = event.source.user_id  # 取得使用者 ID
@@ -182,7 +183,7 @@ def handle_message(event):
 
     user_mode = user_states[user_id]["mode"]  # 取得使用者目前模式
 
-    # 🔹 主選單模式（只能輸入「篩檢」「提升」「我想治療」）
+    # 🔹 主選單模式
     if user_mode == MODE_MAIN_MENU:
         if user_message == "篩檢":
             user_states[user_id]["mode"] = MODE_SCREENING
@@ -203,78 +204,67 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
 
+    # 🔹 返回主選單
+    if user_message == "返回":
+        user_states[user_id] = {"mode": MODE_MAIN_MENU}
+        response_text = "✅ 已返回主選單。\n\n請選擇功能：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+        return
+
     # 🔹 語言發展建議 & 治療模式
     if user_mode in [MODE_TIPS, MODE_TREATMENT]:
-        if user_message == "返回":
-            user_states[user_id] = {"mode": MODE_MAIN_MENU}
-            response_text = (
-                "✅ 已返回主選單。\n"
-                "- 「篩檢」開始語言篩檢\n"
-                "- 「提升」獲取語言發展建議\n"
-                "- 「我想治療」獲取語言治療資源"
-            )
-        else:
-            response_text = "輸入「返回」回到主選單。"
+        response_text = "輸入「返回」回到主選單。"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
 
     # 🔹 篩檢模式（輸入生日）
     if user_mode == MODE_SCREENING:
-        if user_message == "返回":
-            user_states[user_id] = {"mode": MODE_MAIN_MENU}
-            response_text = "✅ 已返回主選單。\n\n請選擇功能：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
-        else:
-            gpt_prompt = f"將這個日期(無論西元或民國年)轉為西元 YYYY-MM-DD 格式，請只輸出日期不要有任何額外的解釋：{user_message}"
-            gpt_response = chat_with_gpt(gpt_prompt)  # 呼叫 GPT 轉換日期
+        gpt_prompt = f"將這個日期(無論西元或民國年)轉為西元 YYYY-MM-DD 格式，請只輸出日期不要有任何額外的解釋：{user_message}"
+        gpt_response = chat_with_gpt(gpt_prompt)  # 呼叫 GPT 轉換日期
 
-            match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", gpt_response)
-            if match:
-                birth_date = datetime.strptime(match.group(0), "%Y-%m-%d").date()
-                total_months = calculate_age(str(birth_date))  # 計算月齡
+        match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", gpt_response)
+        if match:
+            birth_date = datetime.strptime(match.group(0), "%Y-%m-%d").date()
+            total_months = calculate_age(str(birth_date))  # 計算月齡
 
-                if total_months > 36:
-                    response_text = "本篩檢僅適用於三歲以下兒童，若您的孩子超過 36 個月，建議聯絡語言治療師進行進一步評估。\n\n輸入「返回」回到主選單。"
-                    user_states[user_id] = {"mode": MODE_MAIN_MENU}  # 直接返回主選單
-                else:
-                    questions = get_questions_by_age(total_months)
-                    if questions:
-                        user_states[user_id] = {
-                            "mode": MODE_TESTING,
-                            "questions": questions,
-                            "current_index": 0,
-                            "score": 0,
-                            "hint_given": False
-                        }
-                        first_question = questions[0]
-                        response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n\n第一題：{first_question}\n\n輸入「返回」可中途退出篩檢。"
-                    else:
-                        response_text = "無法找到適合此年齡的篩檢題目，請確認 Google Sheets 設定是否正確。\n\n輸入「返回」回到主選單。"
-                        user_states[user_id] = {"mode": MODE_MAIN_MENU}
+            if total_months > 36:
+                response_text = "本篩檢僅適用於三歲以下兒童，若您的孩子超過 36 個月，建議聯絡語言治療師進行進一步評估。\n\n輸入「返回」回到主選單。"
+                user_states[user_id] = {"mode": MODE_MAIN_MENU}
             else:
-                response_text = "請輸入有效的出生年月日（YYYY-MM-DD），例如 2020-08-15。\n\n輸入「返回」回到主選單。"
+                questions = get_questions_by_age(total_months)
+                if questions:
+                    user_states[user_id] = {
+                        "mode": MODE_TESTING,
+                        "questions": questions,
+                        "current_index": 0,
+                        "score": 0
+                    }
+                    first_question = questions[0]
+                    response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n\n第一題：{first_question}\n\n輸入「返回」可中途退出篩檢。"
+                else:
+                    response_text = "無法找到適合此年齡的篩檢題目，請確認 Google Sheets 設定是否正確。\n\n輸入「返回」回到主選單。"
+                    user_states[user_id] = {"mode": MODE_MAIN_MENU}
+        else:
+            response_text = "請輸入有效的出生年月日（YYYY-MM-DD），例如 2020-08-15。\n\n輸入「返回」回到主選單。"
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
 
     # 🔹 測驗模式（逐題篩檢）
     if user_mode == MODE_TESTING:
-        if user_message == "返回":
-            user_states[user_id] = {"mode": MODE_MAIN_MENU}
-            response_text = "✅ 已返回主選單。\n\n請選擇功能：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
+        state = user_states[user_id]
+        questions = state["questions"]
+        current_index = state["current_index"]
+
+        if current_index >= len(questions):  # 篩檢完成
+            response_text = f"篩檢結束！\n您的孩子在測驗中的總得分為：{state['score']} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
+            user_states[user_id] = {"mode": MODE_MAIN_MENU}  # 直接回主選單
         else:
-            state = user_states[user_id]
-            questions = state["questions"]
-            current_index = state["current_index"]
+            current_question = questions[current_index]
+            response_text = f"第 {current_index + 1} 題：{current_question}\n\n請輸入您的回答。\n\n輸入「返回」可中途退出篩檢。"
 
-            if current_index >= len(questions):  # 篩檢完成
-                response_text = f"篩檢結束！\n您的孩子在測驗中的總得分為：{state['score']} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
-                user_states[user_id] = {"mode": MODE_MAIN_MENU}  # 直接回主選單
-            else:
-                current_question = questions[current_index]
-                response_text = f"第 {current_index + 1} 題：{current_question}\n\n請輸入您的回答。\n\n輸入「返回」可中途退出篩檢。"
-
-                # 更新索引，進入下一題
-                user_states[user_id]["current_index"] += 1
+            # 更新索引，進入下一題
+            user_states[user_id]["current_index"] += 1
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
