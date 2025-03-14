@@ -253,74 +253,76 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
 
-    # 🔹 篩檢進行模式
-    if user_mode == MODE_TESTING:
-        state = user_states[user_id]
-        questions = state["questions"]
-        current_index = state["current_index"]
-        score = state["score"]
+        # 🔹 篩檢進行模式
+        if user_mode == MODE_TESTING:
+            state = user_states[user_id]
+            questions = state["questions"]
+            current_index = state["current_index"]
+            score = state["score"]
 
-        if current_index >= len(questions):
-            response_text = f"✅ 篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
-            user_states[user_id] = {"mode": MODE_MAIN_MENU}
+            if current_index >= len(questions):
+                response_text = f"✅ 篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
+                user_states[user_id] = {"mode": MODE_MAIN_MENU}
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+                return
+
+            # 讀取該題目的「通過標準」和「提示」
+            current_question = questions[current_index]
+            question_row_index = current_index + 2  # 試算表從第 2 行開始
+            pass_criteria = sheet.cell(question_row_index, 6).value  # 讀取通過標準
+            hint = sheet.cell(question_row_index, 5).value  # 讀取提示
+
+            # 讓 GPT 根據題目、提示、通過標準來判斷使用者回應
+            gpt_prompt = f"""
+            這是兒童語言篩檢的一道測驗題，請根據題目的「通過標準」來判斷使用者的回答是否符合：
+            
+            題目：{current_question}
+            提示：{hint}
+            通過標準：{pass_criteria}
+            使用者回應：{user_message}
+
+            請根據通過標準，嚴格判斷使用者的回應是否：
+            1 完全符合標準（請**只**回應「符合」）
+            2 完全不符合標準（請**只**回應「不符合」）
+            3 模稜兩可或使用者詢問題目意思（請**只**回應「不清楚」）
+            """
+
+            gpt_response = chat_with_gpt(gpt_prompt).strip()
+            print(f"🔎 GPT 判斷：{gpt_response}")  # ✅ Debug 記錄 GPT 回應
+
+            # 根據 GPT 回應處理邏輯
+            if gpt_response.startswith("符合"):
+                score += 1
+                user_states[user_id]["score"] = score
+                current_index += 1
+                response_text = "了解，現在進入下一題。\n\n"
+            elif gpt_response.startswith("不符合"):
+                current_index += 1
+                response_text = "了解，現在進入下一題。\n\n"
+            elif gpt_response.startswith("不清楚"):
+                # 若回答不清楚，提供簡單易懂的提示
+                hint_prompt = f"請基於以下提示，使用 20 字內的簡單語言解釋：{hint}"
+                hint_response = chat_with_gpt(hint_prompt).strip()
+                response_text = f"⚠️ 本題的意思為：{hint_response}\n請再試一次。"
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+                return
+            else:
+                response_text = "❌ 無法判斷回應，請再試一次。"
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+                return
+
+            user_states[user_id]["current_index"] = current_index
+
+            # 如果還有下一題，繼續篩檢
+            if current_index < len(questions):
+                response_text += f"第 {current_index + 1} 題：{questions[current_index]}\n\n輸入「返回」可中途退出篩檢。"
+            else:
+                # 題目問完，顯示總分
+                response_text = f"✅ 篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
+                user_states[user_id] = {"mode": MODE_MAIN_MENU}
+
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
-
-        # 讀取該題目的「通過標準」和「提示」
-        current_question = questions[current_index]
-        question_row_index = current_index + 2  # 試算表從第 2 行開始
-        pass_criteria = sheet.cell(question_row_index, 6).value
-        hint = sheet.cell(question_row_index, 5).value
-
-        # 讓 GPT 根據題目、提示、通過標準來判斷使用者回應
-        gpt_prompt = f"""
-        這是兒童語言篩檢的一道測驗題，請根據題目的「通過標準」來判斷使用者的回答是否符合：
-        
-        題目：{current_question}
-        提示：{hint}
-        通過標準：{pass_criteria}
-        使用者回應：{user_message}
-
-        請根據通過標準，嚴格判斷使用者的回應是否：
-        1️⃣ 完全符合標準（請**只**回應「符合」）
-        2️⃣ 完全不符合標準（請**只**回應「不符合」）
-        3️⃣ 模稜兩可或使用者詢問題目意思（請**只**回應「不清楚」）
-        """
-
-        gpt_response = chat_with_gpt(gpt_prompt).strip()
-
-        if gpt_response == "符合":
-            score += 1
-            user_states[user_id]["score"] = score
-            current_index += 1
-            response_text = "了解，現在進入下一題。\n\n"
-        elif gpt_response == "不符合":
-            current_index += 1
-            response_text = "了解，現在進入下一題。\n\n"
-        elif gpt_response == "不清楚":
-            # 若回答不清楚，提供簡單易懂的提示
-            hint_prompt = f"請基於以下提示，使用 20 字內的簡單語言解釋：{hint}"
-            hint_response = chat_with_gpt(hint_prompt).strip()
-            response_text = f"⚠️ 本題的意思為：{hint_response}\n請再試一次。"
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
-            return
-        else:
-            response_text = "❌ 無法判斷回應，請再試一次。"
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
-            return
-
-        user_states[user_id]["current_index"] = current_index
-
-        # 如果還有下一題，繼續篩檢
-        if current_index < len(questions):
-            response_text += f"第 {current_index + 1} 題：{questions[current_index]}\n\n輸入「返回」可中途退出篩檢。"
-        else:
-            # 題目問完，顯示總分
-            response_text = f"✅ 篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
-            user_states[user_id] = {"mode": MODE_MAIN_MENU}
-
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
-        return
 
 # 📌 🔟 **啟動 Flask 應用**
 if __name__ == "__main__":
