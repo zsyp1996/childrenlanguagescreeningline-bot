@@ -54,7 +54,7 @@ except Exception as e:
 # **與 OpenAI ChatGPT 互動的函式**
 def chat_with_gpt(prompt):
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4-turbo",
         messages=[
             {"role": "system", "content": "你是一個語言篩檢助手，負責回答家長的問題與記錄兒童的語言發展情況，請提供幫助。請使用繁體中文回答。"},
             {"role": "user", "content": prompt}
