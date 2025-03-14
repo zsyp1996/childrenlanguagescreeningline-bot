@@ -38,18 +38,18 @@ if service_account_json_base64:
     # **設定試算表 ID**
     SPREADSHEET_ID = "1twgKpgWZIzzy7XoMg08jQfweJ2lP4S2LEcGGq-txMVk"
     sheet = gspread_client.open_by_key(SPREADSHEET_ID).sheet1  # 連接第一個工作表
-    print("✅ 成功連接 Google Sheets！")
+    print("成功連接 Google Sheets！")
 else:
-    print("❌ 無法獲取 GOOGLE_SERVICE_ACCOUNT_JSON，請確認環境變數是否正確設定！")
+    print("無法獲取 GOOGLE_SERVICE_ACCOUNT_JSON，請確認環境變數是否正確設定！")
 
 # 📌 4️⃣ **測試是否成功讀取 Google Sheets**
 try:
     sheet_data = sheet.get_all_values()
-    print("✅ 成功連接 Google Sheets，內容(前3行)如下：")
+    print("成功連接 Google Sheets，內容(前3行)如下：")
     for row in sheet_data[:3]:
         print(row)  # Debug：顯示試算表內容
 except Exception as e:
-    print("❌ 無法讀取 Google Sheets，錯誤訊息：", e)
+    print("無法讀取 Google Sheets，錯誤訊息：", e)
 
 # 📌 5️⃣ **計算年齡函式（用於判斷兒童月齡）**
 def calculate_age(birthdate_str):
@@ -88,7 +88,7 @@ def chat_with_gpt(prompt):
             {"role": "user", "content": prompt}
         ]
     )
-    return response.choices[0].message.content  # ✅ 正確回傳 ChatGPT 回應
+    return response.choices[0].message.content  # 正確回傳 ChatGPT 回應
 
 # 📌 7️⃣ **Flask 路由（API 入口點）**
 @app.route("/", methods=["GET"])
@@ -115,9 +115,9 @@ def test_sheets():
     try:
         sheet_data = sheet.get_all_values()  # 讀取試算表的所有內容
         formatted_data = "\n".join([", ".join(row) for row in sheet_data])  # 轉換為可讀的字串格式
-        return f"✅ 成功讀取試算表內容：\n{formatted_data}"
+        return f"成功讀取試算表內容：\n{formatted_data}"
     except Exception as e:
-        return f"❌ 無法讀取 Google Sheets，錯誤訊息：{e}"
+        return f"無法讀取 Google Sheets，錯誤訊息：{e}"
 
 # 📌 8️⃣ **處理使用者加入 Bot 時的回應**
 @handler.add(FollowEvent)
@@ -130,7 +130,7 @@ def handle_follow(event):
 🔹 **我想治療** → 查找附近語言治療服務
 
 ⚠️ 若要進行篩檢，請輸入「篩檢」開始測驗。
-⚠️ 若輸入其他內容，BOT 會重複此訊息。"""
+⚠️ 若輸入其他內容，BOT會重複此訊息。"""
     
     line_bot_api.reply_message(
         event.reply_token,
@@ -205,7 +205,7 @@ def handle_message(event):
             user_states[user_id] = {"mode": MODE_TREATMENT}
             response_text = "語言治療機構資訊：請搜尋官方語言治療機構網站，或聯絡當地醫療院所。\n\n輸入「返回」回到主選單。"
         else:
-            response_text = "❌ 無效指令，請輸入：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
+            response_text = "❌無效指令，請輸入：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
 
@@ -213,7 +213,7 @@ def handle_message(event):
     if user_mode in [MODE_TIPS, MODE_TREATMENT]:
         if user_message == "返回":
             user_states[user_id] = {"mode": MODE_MAIN_MENU}
-            response_text = "✅ 已返回主選單。\n\n請選擇功能：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
+            response_text = "✅已返回主選單。\n\n請選擇功能：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
         else:
             response_text = "輸入「返回」回到主選單。"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -286,7 +286,8 @@ def handle_message(event):
 
         **請務必只回應「符合」、「不符合」或「不清楚」，不得包含任何額外說明！**
         """
-
+        print("送給GPT的prompt：")
+        print(gpt_prompt)
         gpt_response = chat_with_gpt(gpt_prompt).strip()
         print(f"GPT 判斷：{gpt_response}")  # Debug 記錄 GPT 回應
 
@@ -318,7 +319,7 @@ def handle_message(event):
             response_text += f"第 {current_index + 1} 題：{questions[current_index]}\n\n輸入「返回」可中途退出篩檢。"
         else:
             # 題目問完，顯示總分
-            response_text = f"✅ 篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
+            response_text = f"✅篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
             user_states[user_id] = {"mode": MODE_MAIN_MENU}
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
