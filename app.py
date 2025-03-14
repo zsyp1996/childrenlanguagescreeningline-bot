@@ -81,7 +81,6 @@ def calculate_age(birthdate_str):
 
 # 📌 6️⃣ **與 OpenAI ChatGPT 互動的函式**
 def chat_with_gpt(prompt):
-    """與 OpenAI ChatGPT 互動，確保 Bot 只回答篩檢問題"""
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
@@ -175,7 +174,6 @@ MODE_TIPS = "語言發展建議模式"
 MODE_TREATMENT = "語言治療資訊模式"
 MODE_TESTING = "進行篩檢"
 
-@handler.add(MessageEvent, message=TextMessage)
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     """處理使用者輸入的文字訊息"""
@@ -289,7 +287,7 @@ def handle_message(event):
         3️⃣ 模稜兩可或使用者詢問題目意思（請回應：「不清楚」）
         """
 
-        gpt_response = chat_with_gpt(gpt_prompt)
+        gpt_response = chat_with_gpt(gpt_prompt).strip()
 
         if "符合" in gpt_response:
             score += 1
@@ -302,7 +300,7 @@ def handle_message(event):
         else:
             # 若回答不清楚，提供簡單易懂的提示
             hint_prompt = f"請基於以下提示，使用 20 字內的簡單語言解釋：{hint}"
-            hint_response = chat_with_gpt(hint_prompt)
+            hint_response = chat_with_gpt(hint_prompt).strip()
             response_text = f"⚠️ 本題的意思為：{hint_response}\n請再試一次。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
@@ -319,6 +317,7 @@ def handle_message(event):
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
+
 
 # 📌 🔟 **啟動 Flask 應用**
 if __name__ == "__main__":
