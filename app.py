@@ -281,27 +281,31 @@ def handle_message(event):
         通過標準：{pass_criteria}
         使用者回應：{user_message}
 
-        請根據通過標準，判斷使用者的回應是否：
-        1️⃣ 符合標準（請回應：「符合」）
-        2️⃣ 不符合標準（請回應：「不符合」）
-        3️⃣ 模稜兩可或使用者詢問題目意思（請回應：「不清楚」）
+        請根據通過標準，嚴格判斷使用者的回應是否：
+        1️⃣ 完全符合標準（請**只**回應「符合」）
+        2️⃣ 完全不符合標準（請**只**回應「不符合」）
+        3️⃣ 模稜兩可或使用者詢問題目意思（請**只**回應「不清楚」）
         """
 
         gpt_response = chat_with_gpt(gpt_prompt).strip()
 
-        if "符合" in gpt_response:
+        if gpt_response == "符合":
             score += 1
             user_states[user_id]["score"] = score
             current_index += 1
             response_text = "了解，現在進入下一題。\n\n"
-        elif "不符合" in gpt_response:
+        elif gpt_response == "不符合":
             current_index += 1
             response_text = "了解，現在進入下一題。\n\n"
-        else:
+        elif gpt_response == "不清楚":
             # 若回答不清楚，提供簡單易懂的提示
             hint_prompt = f"請基於以下提示，使用 20 字內的簡單語言解釋：{hint}"
             hint_response = chat_with_gpt(hint_prompt).strip()
             response_text = f"⚠️ 本題的意思為：{hint_response}\n請再試一次。"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+            return
+        else:
+            response_text = "❌ 無法判斷回應，請再試一次。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
 
@@ -317,7 +321,6 @@ def handle_message(event):
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
-
 
 # 📌 🔟 **啟動 Flask 應用**
 if __name__ == "__main__":
