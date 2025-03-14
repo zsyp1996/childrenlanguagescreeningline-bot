@@ -172,6 +172,7 @@ MODE_TREATMENT = "語言治療資訊模式"
 MODE_TESTING = "進行篩檢"
 
 @handler.add(MessageEvent, message=TextMessage)
+@handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     """處理使用者輸入的文字訊息"""
     user_id = event.source.user_id  # 取得使用者 ID
@@ -182,6 +183,13 @@ def handle_message(event):
         user_states[user_id] = {"mode": MODE_MAIN_MENU}
 
     user_mode = user_states[user_id]["mode"]  # 取得使用者目前模式
+
+    # 🔹 返回主選單
+    if user_message == "返回":
+        user_states[user_id] = {"mode": MODE_MAIN_MENU}
+        response_text = "✅ 已返回主選單。\n\n請選擇功能：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+        return
 
     # 🔹 主選單模式
     if user_mode == MODE_MAIN_MENU:
@@ -195,25 +203,7 @@ def handle_message(event):
             user_states[user_id]["mode"] = MODE_TREATMENT
             response_text = "語言治療機構資訊：請搜尋官方語言治療機構網站，或聯絡當地醫療院所。\n\n輸入「返回」回到主選單。"
         else:
-            response_text = (
-                "❌ 無效指令，請輸入：\n"
-                "- 「篩檢」開始語言篩檢\n"
-                "- 「提升」獲取語言發展建議\n"
-                "- 「我想治療」獲取語言治療資源"
-            )
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
-        return
-
-    # 🔹 返回主選單
-    if user_message == "返回":
-        user_states[user_id] = {"mode": MODE_MAIN_MENU}
-        response_text = "✅ 已返回主選單。\n\n請選擇功能：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
-        return
-
-    # 🔹 語言發展建議 & 治療模式
-    if user_mode in [MODE_TIPS, MODE_TREATMENT]:
-        response_text = "輸入「返回」回到主選單。"
+            response_text = "❌ 無效指令，請輸入：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
 
@@ -255,16 +245,35 @@ def handle_message(event):
         state = user_states[user_id]
         questions = state["questions"]
         current_index = state["current_index"]
+        score = state["score"]
 
         if current_index >= len(questions):  # 篩檢完成
-            response_text = f"篩檢結束！\n您的孩子在測驗中的總得分為：{state['score']} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
-            user_states[user_id] = {"mode": MODE_MAIN_MENU}  # 直接回主選單
+            response_text = f"篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
+            user_states[user_id] = {"mode": MODE_MAIN_MENU}
         else:
-            current_question = questions[current_index]
-            response_text = f"第 {current_index + 1} 題：{current_question}\n\n請輸入您的回答。\n\n輸入「返回」可中途退出篩檢。"
+            # 讓 GPT 判斷回應是否符合標準
+            gpt_prompt = f"請判斷以下回答是否符合標準：\n問題：{questions[current_index]}\n使用者回答：{user_message}\n請回答『符合』或『不符合』或『不清楚』。"
+            gpt_response = chat_with_gpt(gpt_prompt)
 
-            # 更新索引，進入下一題
-            user_states[user_id]["current_index"] += 1
+            if "符合" in gpt_response:
+                score += 1
+                user_states[user_id]["score"] = score
+                response_text = "✅ 回答正確！"
+            elif "不符合" in gpt_response:
+                response_text = "❌ 回答不符合標準。"
+            else:
+                response_text = "⚠️ 回答不明確，請再試一次或請提供更多細節。"
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+                return  # 不進入下一題
+
+            current_index += 1
+            if current_index < len(questions):
+                next_question = questions[current_index]
+                response_text += f"\n\n第 {current_index + 1} 題：{next_question}\n\n輸入「返回」可中途退出篩檢。"
+                user_states[user_id]["current_index"] = current_index
+            else:
+                response_text += f"\n\n篩檢完成！您的總得分：{score} 分。\n\n輸入「返回」回到主選單。"
+                user_states[user_id] = {"mode": MODE_MAIN_MENU}
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
