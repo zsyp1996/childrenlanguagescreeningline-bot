@@ -173,7 +173,6 @@ MODE_TESTING = "進行篩檢"
 
 @handler.add(MessageEvent, message=TextMessage)
 @handler.add(MessageEvent, message=TextMessage)
-@handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     """處理使用者輸入的文字訊息"""
     user_id = event.source.user_id  # 取得使用者 ID
@@ -192,14 +191,74 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
 
-    # 🔹 測驗模式（逐題篩檢）
+    # 🔹 主選單模式
+    if user_mode == MODE_MAIN_MENU:
+        if user_message == "篩檢":
+            user_states[user_id] = {"mode": MODE_SCREENING}
+            response_text = "請提供孩子的西元出生年月日（YYYY-MM-DD），以便開始語言篩檢。\n\n輸入「返回」回到主選單。"
+        elif user_message == "提升":
+            user_states[user_id] = {"mode": MODE_TIPS}
+            response_text = "幼兒語言發展建議：\n- 與孩子多對話，描述日常事物。\n- 用簡單但完整的句子與孩子交流。\n- 讀繪本、唱童謠、玩互動遊戲來促進語言學習。\n\n輸入「返回」回到主選單。"
+        elif user_message == "我想治療":
+            user_states[user_id] = {"mode": MODE_TREATMENT}
+            response_text = "語言治療機構資訊：請搜尋官方語言治療機構網站，或聯絡當地醫療院所。\n\n輸入「返回」回到主選單。"
+        else:
+            response_text = "❌ 無效指令，請輸入：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+        return
+
+    # 🔹 語言發展建議 & 治療模式
+    if user_mode in [MODE_TIPS, MODE_TREATMENT]:
+        if user_message == "返回":
+            user_states[user_id] = {"mode": MODE_MAIN_MENU}
+            response_text = "✅ 已返回主選單。\n\n請選擇功能：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
+        else:
+            response_text = "輸入「返回」回到主選單。"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+        return
+
+    # 🔹 篩檢模式（計算年齡）
+    if user_mode == MODE_SCREENING:
+        gpt_prompt = f"將這個日期(無論西元或民國年)轉為西元 YYYY-MM-DD 格式，請只輸出日期不要有任何額外的解釋：{user_message}"
+        gpt_response = chat_with_gpt(gpt_prompt)
+
+        print("GPT 回應:", gpt_response)
+
+        match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", gpt_response)
+        if match:
+            birth_date = datetime.strptime(match.group(0), "%Y-%m-%d").date()
+            total_months = calculate_age(str(birth_date))
+
+            if total_months > 36:
+                response_text = "本篩檢僅適用於三歲以下兒童，若您的孩子超過 36 個月，建議聯絡語言治療師進行進一步評估。\n\n輸入「返回」回到主選單。"
+                user_states[user_id] = {"mode": MODE_MAIN_MENU}
+            else:
+                questions = get_questions_by_age(total_months)
+                if questions:
+                    user_states[user_id] = {
+                        "mode": MODE_TESTING,
+                        "questions": questions,
+                        "current_index": 0,
+                        "score": 0
+                    }
+                    response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n\n第 1 題：{questions[0]}\n\n輸入「返回」可中途退出篩檢。"
+                else:
+                    response_text = "無法找到適合此年齡的篩檢題目，請確認 Google Sheets 設定是否正確。\n\n輸入「返回」回到主選單。"
+                    user_states[user_id] = {"mode": MODE_MAIN_MENU}
+        else:
+            response_text = "若要進行語言篩檢，請提供有效的西元出生日期（YYYY-MM-DD），例如 2020-08-15。\n\n輸入「返回」回到主選單。"
+
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+        return
+
+    # 🔹 篩檢進行模式
     if user_mode == MODE_TESTING:
         state = user_states[user_id]
         questions = state["questions"]
         current_index = state["current_index"]
         score = state["score"]
 
-        if current_index >= len(questions):  # 篩檢完成
+        if current_index >= len(questions):
             response_text = f"篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
             user_states[user_id] = {"mode": MODE_MAIN_MENU}
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -207,36 +266,26 @@ def handle_message(event):
 
         # 讀取該題目的「通過標準」和「提示」
         current_question = questions[current_index]
-        pass_criteria = sheet.cell(current_index + 2, 6).value  # Google Sheets 第 F 欄（通過標準）
-        hint = sheet.cell(current_index + 2, 5).value  # Google Sheets 第 E 欄（提示）
+        pass_criteria = sheet.cell(current_index + 2, 6).value
+        hint = sheet.cell(current_index + 2, 5).value
 
-        # 讓 GPT 判斷回應是否符合標準
         gpt_prompt = f"根據以下的通過標準，請判斷使用者的回答是否符合標準。\n\n題目：{current_question}\n通過標準：{pass_criteria}\n使用者回答：{user_message}\n請回覆「符合」、「不符合」或「不清楚」。"
         gpt_response = chat_with_gpt(gpt_prompt)
 
         if "符合" in gpt_response:
             score += 1
             user_states[user_id]["score"] = score
-            move_to_next_question = True
+            current_index += 1
         elif "不符合" in gpt_response:
-            move_to_next_question = True
-        else:  # 回答不清楚
-            gpt_hint_prompt = f"請基於以下提示，用簡單易懂的語言重新表達：{hint}"
-            hint_response = chat_with_gpt(gpt_hint_prompt)
+            current_index += 1
+        else:
+            hint_response = chat_with_gpt(f"請基於以下提示，用簡單易懂的語言重新表達：{hint}")
             response_text = f"⚠️ 回答不明確，請再試一次。\n提示：{hint_response}"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
-            return  # 不進入下一題，讓使用者再回答一次
+            return
 
-        # 進入下一題
-        current_index += 1
-        if current_index < len(questions):
-            next_question = questions[current_index]
-            response_text = f"第 {current_index + 1} 題：{next_question}\n\n輸入「返回」可中途退出篩檢。"
-            user_states[user_id]["current_index"] = current_index
-        else:
-            response_text = f"篩檢完成！您的總得分：{score} 分。\n\n輸入「返回」回到主選單。"
-            user_states[user_id] = {"mode": MODE_MAIN_MENU}
-
+        user_states[user_id]["current_index"] = current_index
+        response_text = f"第 {current_index + 1} 題：{questions[current_index]}\n\n輸入「返回」可中途退出篩檢。"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
 
