@@ -169,7 +169,7 @@ MODE_MAIN_MENU = "主選單"
 MODE_SCREENING = "篩檢模式"
 MODE_TIPS = "語言發展建議模式"
 MODE_TREATMENT = "語言治療資訊模式"
-
+MODE_TESTING = "進行篩檢"
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
@@ -182,6 +182,21 @@ def handle_message(event):
         user_states[user_id] = MODE_MAIN_MENU
 
     user_mode = user_states[user_id]  # 取得使用者目前模式
+
+    # 🔹 任何狀態下，使用者輸入「返回」則回到主選單
+    if user_message == "返回":
+        user_states[user_id] = MODE_MAIN_MENU
+        response_text = """🎉 歡迎來到 **兒童語言篩檢 BOT**！
+請選擇您需要的功能，輸入對應的關鍵字開始：
+🔹 **篩檢** → 進行兒童語言發展篩檢
+🔹 **提升** → 獲取語言發展建議
+🔹 **我想治療** → 查找附近語言治療服務
+
+⚠️ 若要進行篩檢，請輸入「篩檢」開始測驗。
+⚠️ 若輸入其他內容，BOT 會重複此訊息。
+"""
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+        return
 
     # 🔹 主選單模式（只能輸入「篩檢」「提升」「我想治療」）
     if user_mode == MODE_MAIN_MENU:
@@ -206,20 +221,11 @@ def handle_message(event):
 
     # 🔹 語言發展建議 & 治療模式
     if user_mode in [MODE_TIPS, MODE_TREATMENT]:
-        if user_message == "返回":
-            user_states[user_id] = MODE_MAIN_MENU
-            response_text = (
-                "✅ 已返回主選單。\n"
-                "- 「篩檢」開始語言篩檢\n"
-                "- 「提升」獲取語言發展建議\n"
-                "- 「我想治療」獲取語言治療資源"
-            )
-        else:
-            response_text = "輸入「返回」回到主選單。"
+        response_text = "輸入「返回」回到主選單。"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
 
-    # 🔹 篩檢模式
+    # 🔹 篩檢模式（輸入年齡）
     if user_mode == MODE_SCREENING:
         gpt_prompt = f"將這個日期(無論西元或民國年)轉為西元 YYYY-MM-DD 格式，請只輸出日期不要有任何額外的解釋：{user_message}"
         gpt_response = chat_with_gpt(gpt_prompt)  # 呼叫 GPT 轉換日期
@@ -232,19 +238,27 @@ def handle_message(event):
             total_months = calculate_age(str(birth_date))  # 計算月齡
 
             if total_months > 36:
-                response_text = "本篩檢僅適用於三歲以下兒童，若您的孩子超過 36 個月，建議聯絡語言治療師進行進一步評估。"
+                response_text = "本篩檢僅適用於三歲以下兒童，若您的孩子超過 36 個月，建議聯絡語言治療師進行進一步評估。\n\n輸入「返回」回到主選單。"
                 user_states[user_id] = MODE_MAIN_MENU  # 直接返回主選單
             else:
                 questions = get_questions_by_age(total_months)
                 if questions:
                     first_question = questions[0]
-                    response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n\n第一題：{first_question}"
-                    user_states[user_id] = "進行篩檢"
+                    response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n\n第一題：{first_question}\n\n輸入「返回」可中途退出篩檢。"
+                    user_states[user_id] = MODE_TESTING  # 進入測試模式
                 else:
-                    response_text = "無法找到適合此年齡的篩檢題目，請確認 Google Sheets 設定是否正確。"
+                    response_text = "無法找到適合此年齡的篩檢題目，請確認 Google Sheets 設定是否正確。\n\n輸入「返回」回到主選單。"
                     user_states[user_id] = MODE_MAIN_MENU
         else:
-            response_text = "若要進行語言篩檢，請提供有效的西元出生日期（YYYY-MM-DD），例如 2020-08-15。"
+            response_text = "若要進行語言篩檢，請提供有效的西元出生日期（YYYY-MM-DD），例如 2020-08-15。\n\n輸入「返回」回到主選單。"
+
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+        return
+
+    # 🔹 篩檢測驗進行中
+    if user_mode == MODE_TESTING:
+        # TODO: 這裡可以加入測驗邏輯，例如根據使用者回答來計分
+        response_text = "測驗進行中，請回答問題。\n\n輸入「返回」回到主選單。"
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
