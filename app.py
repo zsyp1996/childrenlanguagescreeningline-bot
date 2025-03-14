@@ -45,8 +45,8 @@ else:
 # 📌 4️⃣ **測試是否成功讀取 Google Sheets**
 try:
     sheet_data = sheet.get_all_values()
-    print("✅ 成功連接 Google Sheets，內容如下：")
-    for row in sheet_data:
+    print("✅ 成功連接 Google Sheets，內容(前3行)如下：")
+    for row in sheet_data[:3]:
         print(row)  # Debug：顯示試算表內容
 except Exception as e:
     print("❌ 無法讀取 Google Sheets，錯誤訊息：", e)
@@ -286,7 +286,7 @@ def handle_message(event):
         2️⃣ 完全不符合標準（請**只**回應「不符合」）
         3️⃣ 模稜兩可或使用者詢問題目意思（請**只**回應「不清楚」）
 
-        如果判斷為「不清楚」，請根據提示生成 20 字內的簡單解釋，讓家長更容易理解該題目。
+        **請務必只回應「符合」、「不符合」或「不清楚」，不得包含任何額外說明！**
         """
 
         gpt_response = chat_with_gpt(gpt_prompt).strip()
