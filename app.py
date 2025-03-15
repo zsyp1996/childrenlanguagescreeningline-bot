@@ -115,9 +115,11 @@ def get_questions_by_age(months):
     try:
         sheet_data = sheet.get_all_values()  # 讀取試算表
         questions = []  # 存放符合條件的題目
+        current_group = None  # 用於存儲當前組別
 
         for row in sheet_data[1:]:  # 跳過標題列
-            age_range = row[1]  # 年齡區間（例如 "0-4個月", "9-12個月"）
+            group_number = int(row[0])  # 組別欄
+            age_range = row[1]  # 年齡區間（例如 "0-4個月"）
             question_number = row[2]  # 題號（第二欄）
             question_text = row[3]  # 題目內容（第三欄）
 
@@ -126,12 +128,26 @@ def get_questions_by_age(months):
             if len(match) == 2:  # 只考慮 "X-Y個月" 這種類型
                 min_age, max_age = map(int, match)
                 if min_age <= months <= max_age:
-                    questions.append({"題號": question_number, "題目": question_text})
+                    questions.append({"組別": group_number, "題號": question_number, "題目": question_text})
 
-        return questions if questions else None  # 若沒有符合的題目則回傳 None
+        return questions if questions else None
     except Exception as e:
         print("讀取 Google Sheets 失敗，錯誤訊息：", e)
         return None
+
+def get_min_age_for_group(group):
+    group_age_mapping = {
+        1: 0,
+        2: 5,
+        3: 9,
+        4: 13,
+        5: 17,
+        6: 21,
+        7: 25,
+        8: 29,
+        9: 33
+    }
+    return group_age_mapping.get(group, None)  # 若組別無效，回傳 None
 
 # **處理使用者加入 Bot 時的回應**
 @handler.add(FollowEvent)
@@ -224,13 +240,17 @@ def handle_message(event):
             else:
                 questions = get_questions_by_age(total_months)
                 if questions:
+                    group = questions[0]["組別"]  # 取得題目所屬的組別
+                    min_age_in_group = get_min_age_for_group(group)
+
                     user_states[user_id] = {
                         "mode": MODE_TESTING,
                         "questions": questions,
                         "current_index": 0,
                         "score": 0
+                        "min_age_in_group": min_age_in_group
                     }
-                    response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n注意：bot需要時間回應，請在回答完每個問題後稍加等待並盡量避免錯別字，謝謝。\n\n第 1 題：{questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
+                    response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n注意：bot需要時間回應，請在回答完每個問題後稍加等待並盡量避免錯別字，謝謝。\n\n題目：{questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
                 else:
                     response_text = "無法找到適合此年齡的篩檢題目，請確認 Google Sheets 設定是否正確。\n\n輸入「返回」回到主選單。"
                     user_states[user_id] = {"mode": MODE_MAIN_MENU}
@@ -240,19 +260,70 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
 
-        # **篩檢進行模式
+    # **篩檢進行模式**
     if user_mode == MODE_TESTING:
         state = user_states[user_id]
         questions = state["questions"]
         current_index = state["current_index"]
         score = state["score"]
+        min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
 
-        if current_index >= len(questions):
-            response_text = f"✅ 篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
+        if questions:
+            current_group = int(questions[0]['組別'])
+        else:
+            response_text = "無法找到符合年齡的題目，請確認資料是否正確。\n\n輸入「返回」回到主選單。"
             user_states[user_id] = {"mode": MODE_MAIN_MENU}
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
-        
+
+        if current_index >= len(questions):
+            total_questions = len(questions)
+            pass_percentage = score / total_questions  # 計算通過比例
+
+            if pass_percentage == 1.0 and current_group < 9:  
+                # 順向施測（進入下一組）
+                next_group = current_group + 1
+                min_age_in_group = get_min_age_for_group(next_group)
+                new_questions = get_questions_by_age(min_age_in_group)
+
+                if new_questions:
+                    user_states[user_id].update({
+                        "group": next_group,
+                        "min_age_in_group": min_age_in_group,
+                        "questions": new_questions,
+                        "current_index": 0,
+                        "score": score
+                    })
+                    response_text = f"題目：{new_questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
+                else:
+                    response_text = f"✅篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
+                    user_states[user_id] = {"mode": MODE_MAIN_MENU}
+
+            elif pass_percentage < 1.0 and current_group > 1:
+                # 逆向施測（進入上一組）
+                previous_group = current_group - 1
+                min_age_in_group = get_min_age_for_group(previous_group)
+                new_questions = get_questions_by_age(min_age_in_group)
+
+                if new_questions:
+                    user_states[user_id].update({
+                        "group": previous_group,
+                        "min_age_in_group": min_age_in_group,
+                        "questions": new_questions,
+                        "current_index": 0,
+                        "score": score
+                    })
+                    response_text = f"題目：{new_questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
+                else:
+                    response_text = f"✅篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
+                    user_states[user_id] = {"mode": MODE_MAIN_MENU}
+
+            else:
+                # 沒有順向/逆向施測，正常結束
+                response_text = f"✅篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
+                user_states[user_id] = {"mode": MODE_MAIN_MENU}
+
+
         # **取得目前這題的題號
         current_question = questions[current_index]
         question_number = current_question["題號"]
@@ -316,7 +387,7 @@ def handle_message(event):
 
         # **如果還有下一題，繼續篩檢
         if current_index < len(questions):
-            response_text += f"第 {current_index + 1} 題：{questions[current_index]['題目']}\n\n輸入「返回」可中途退出篩檢。"
+            response_text += f"題目：{questions[current_index]['題目']}\n\n輸入「返回」可中途退出篩檢。"
         else:
             # **題目問完，顯示總分
             response_text = f"✅篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
