@@ -117,19 +117,20 @@ def get_questions_by_age(months):
         questions = []  # 存放符合條件的題目
 
         for row in sheet_data[1:]:  # 跳過標題列
-            age_range = row[0]  # 年齡區間（例如 "0-4個月", "9-12個月"）
-            question = row[2]  # 題目內容
+            age_range = row[1]  # 年齡區間（例如 "0-4個月", "9-12個月"）
+            question_number = row[2]  # 題號（第二欄）
+            question_text = row[3]  # 題目內容（第三欄）
 
             # **解析 "X-Y個月" 這種類型**
             match = re.findall(r'\d+', age_range)
             if len(match) == 2:  # 只考慮 "X-Y個月" 這種類型
                 min_age, max_age = map(int, match)
                 if min_age <= months <= max_age:
-                    questions.append(question)
+                    questions.append({"題號": question_number, "題目": question_text})
 
         return questions if questions else None  # 若沒有符合的題目則回傳 None
     except Exception as e:
-        print("❌ 讀取 Google Sheets 失敗，錯誤訊息：", e)
+        print("讀取 Google Sheets 失敗，錯誤訊息：", e)
         return None
 
 # **處理使用者加入 Bot 時的回應**
@@ -251,16 +252,29 @@ def handle_message(event):
             user_states[user_id] = {"mode": MODE_MAIN_MENU}
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
-
-        # **讀取該題目的「通過標準」和「提示」
+        
+        # **取得目前這題的題號
         current_question = questions[current_index]
-        question_row_index = current_index + 2  # 試算表從第 2 行開始
-        pass_criteria = sheet.cell(question_row_index, 6).value  # 讀取通過標準
-        hint = sheet.cell(question_row_index, 5).value  # 讀取提示
+        question_number = current_question["題號"]
+
+        # **遍歷 Google Sheets，根據「題號」找到正確的行號
+        question_row_index = None
+        for i, row in enumerate(sheet.get_all_values(), start=1):  # i 為試算表實際的行號（從 1 開始）
+            if row[2] == question_number:  # 題號在第三欄
+                question_row_index = i
+                break
+
+        # **確保找到對應的行號**
+        if question_row_index is not None:
+            pass_criteria = sheet.cell(question_row_index, 7).value  # 第7欄：通過標準
+            hint = sheet.cell(question_row_index, 6).value  # 第6欄：提示
+        else:
+            pass_criteria = "未找到通過標準"
+            hint = "未找到提示"
 
         # **讓 deepseek 根據題目、提示、通過標準來判斷使用者回應
         deepseek_prompt = f"""
-        題目：{current_question}
+        題目：{current_question['題目']}
         提示：{hint}
         通過標準：{pass_criteria}
         使用者回應：{user_message}
@@ -288,9 +302,9 @@ def handle_message(event):
             response_text = "了解，現在進入下一題。\n\n"
         elif deepseek_response.startswith("不清楚"):
             # **若回答不清楚，提供簡單易懂的提示
-            hint_prompt = f"請基於以下提示，使用30字內的解釋，要簡單平易近人不要列點：{hint}"
+            hint_prompt = f"請基於以下提示使用30字內的解釋回應使用者，要簡單平易近人不要列點：{hint}"
             hint_response = chat_with_deepseek(hint_prompt).strip()
-            response_text = f"你的回答不是很清楚，本題的意思是：{hint_response}\n請再回覆一次。"
+            response_text = f"{hint_response}\n請再回覆一次。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
         else:
