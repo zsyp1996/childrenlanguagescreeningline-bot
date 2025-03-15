@@ -9,58 +9,48 @@ from flask import Flask, request
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage, FollowEvent
-from openai import OpenAI  # 確保 import 最新的 OpenAI 函式庫
-from datetime import datetime, timedelta  # 🆕 計算年齡所需
+from openai import OpenAI  # 使用 OpenAI SDK 兼容格式
+from datetime import datetime, timedelta
 
 # **初始化 Flask 與 API 相關變數**
 app = Flask(__name__)
 LINE_ACCESS_TOKEN = os.getenv("LINE_ACCESS_TOKEN")
 LINE_SECRET = os.getenv("LINE_SECRET")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")  # 環境變數名稱更改
 
-# **初始化 LINE Bot API
+# **初始化 LINE Bot API**
 line_bot_api = LineBotApi(LINE_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_SECRET)
 
-# **初始化 OpenAI API
-client = OpenAI(api_key=OPENAI_API_KEY)
+# **初始化 DeepSeek API（使用 OpenAI SDK 兼容格式）**
+client = OpenAI(
+    api_key=DEEPSEEK_API_KEY,
+    base_url="https://api.deepseek.com"  # 設定 DeepSeek API 端點
+)
 
-# **連接 Google Sheets API（使用 Base64 環境變數）**
+# **連接 Google Sheets API（代碼保持不變）**
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-
-# **從環境變數讀取 Base64 JSON 並解碼**
 service_account_json_base64 = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
 if service_account_json_base64:
     service_account_info = json.loads(base64.b64decode(service_account_json_base64))
     creds = Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
     gspread_client = gspread.authorize(creds)
-
-    # **設定試算表 ID**
     SPREADSHEET_ID = "1twgKpgWZIzzy7XoMg08jQfweJ2lP4S2LEcGGq-txMVk"
-    sheet = gspread_client.open_by_key(SPREADSHEET_ID).sheet1  # 連接第一個工作表
+    sheet = gspread_client.open_by_key(SPREADSHEET_ID).sheet1
     print("成功連接 Google Sheets！")
 else:
     print("無法獲取 GOOGLE_SERVICE_ACCOUNT_JSON，請確認環境變數是否正確設定！")
 
-# **測試是否成功讀取 Google Sheets**
-try:
-    sheet_data = sheet.get_all_values()
-    print("成功連接 Google Sheets，內容(前3行)如下：")
-    for row in sheet_data[:3]:
-        print(row)  # Debug：顯示試算表內容
-except Exception as e:
-    print("無法讀取 Google Sheets，錯誤訊息：", e)
-
-# **與 OpenAI ChatGPT 互動的函式**
-def chat_with_gpt(prompt):
+# **與 DeepSeek 互動的函式**
+def chat_with_deepseek(prompt):
     response = client.chat.completions.create(
-        model="gpt-4-turbo",
+        model="deepseek-chat",  # 使用 DeepSeek 模型名稱
         messages=[
             {"role": "system", "content": "你是一個語言篩檢助手，負責回答家長的問題與記錄兒童的語言發展情況，請提供幫助。請使用繁體中文回答。"},
             {"role": "user", "content": prompt}
         ]
     )
-    return response.choices[0].message.content  # 正確回傳 ChatGPT 回應
+    return response.choices[0].message.content  # 解析響應格式與 OpenAI 相同
 
 # **Flask 路由（API 入口點）**
 @app.route("/", methods=["GET"])
@@ -221,12 +211,12 @@ def handle_message(event):
 
     # **篩檢模式（計算年齡）
     if user_mode == MODE_SCREENING:
-        gpt_prompt = f"將這個日期(無論西元或民國年)轉為西元 YYYY-MM-DD 格式，請只輸出日期不要有任何額外的解釋：{user_message}"
-        gpt_response = chat_with_gpt(gpt_prompt)
+        deepseek_prompt = f"將這個日期(無論西元或民國年)轉為西元 YYYY-MM-DD 格式，請只輸出日期不要有任何額外的解釋：{user_message}"
+        deepseek_response = chat_with_deepseek(deepseek_prompt)
 
-        print("GPT 回應:", gpt_response)
+        print("deepseek回應:", deepseek_response)
 
-        match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", gpt_response)
+        match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", deepseek_response)
         if match:
             birth_date = datetime.strptime(match.group(0), "%Y-%m-%d").date()
             total_months = calculate_age(str(birth_date))
@@ -272,8 +262,8 @@ def handle_message(event):
         pass_criteria = sheet.cell(question_row_index, 6).value  # 讀取通過標準
         hint = sheet.cell(question_row_index, 5).value  # 讀取提示
 
-        # **讓 GPT 根據題目、提示、通過標準來判斷使用者回應
-        gpt_prompt = f"""
+        # **讓 deepseek 根據題目、提示、通過標準來判斷使用者回應
+        deepseek_prompt = f"""
         題目：{current_question}
         提示：{hint}
         通過標準：{pass_criteria}
@@ -284,28 +274,28 @@ def handle_message(event):
         2. 符合：使用者的回答符合「通過標準」(不需字句相同)。請只回應「符合」。
         3. 不符合：使用者的回答並非不清楚且未達到「通過標準」。請只回應「不符合」。
 
-        **請務必只回應「符合」、「不符合」或「不清楚」，不要任何額外說明和標點符號！**
+        **請務必只回應「符合」、「不符合」或「不清楚」，不要任何額外文字、符號或解釋！**
         """
 
-        print("送給GPT的prompt")
-        print(gpt_prompt) # Debug 記錄 GPT prompt
+        print("送給deepseek的prompt")
+        print(deepseek_prompt) # Debug 記錄 deepseek prompt
 
-        gpt_response = chat_with_gpt(gpt_prompt).strip()
-        print(f"GPT 判斷：{gpt_response}")  # Debug 記錄 GPT 回應
+        deepseek_response = chat_with_deepseek(deepseek_prompt).strip()
+        print(f"deepseek 判斷：{deepseek_response}")  # Debug 記錄 deepseek 回應
 
-        # **根據 GPT 回應處理邏輯
-        if gpt_response.startswith("符合"):
+        # **根據 deepseek 回應處理邏輯
+        if deepseek_response.startswith("符合"):
             score += 1
             user_states[user_id]["score"] = score
             current_index += 1
             response_text = "了解，現在進入下一題。\n\n"
-        elif gpt_response.startswith("不符合"):
+        elif deepseek_response.startswith("不符合"):
             current_index += 1
             response_text = "了解，現在進入下一題。\n\n"
-        elif gpt_response.startswith("不清楚"):
+        elif deepseek_response.startswith("不清楚"):
             # **若回答不清楚，提供簡單易懂的提示
             hint_prompt = f"請基於以下提示，使用 20 字內的簡單語言解釋：{hint}"
-            hint_response = chat_with_gpt(hint_prompt).strip()
+            hint_response = chat_with_deepseek(hint_prompt).strip()
             response_text = f"⚠️本題的意思為：{hint_response}\n請再試一次。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
