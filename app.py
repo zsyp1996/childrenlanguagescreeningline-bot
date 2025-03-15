@@ -270,7 +270,7 @@ def handle_message(event):
         print("進行原月齡組題組", current_index, score_first)###
 
         # **取得目前這題的題號
-        current_question = questions[current_index]['題目']
+        current_question = questions[current_index]
         question_number = current_question["題號"]
 
         # **遍歷 Google Sheets，根據「題號」找到正確的行號
