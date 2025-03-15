@@ -200,7 +200,7 @@ def handle_message(event):
     if user_mode == MODE_MAIN_MENU:
         if user_message == "篩檢":
             user_states[user_id] = {"mode": MODE_SCREENING}
-            response_text = "請提供孩子的西元出生年月日（YYYY-MM-DD），以便開始語言篩檢。\n\n輸入「返回」回到主選單。"
+            response_text = "請提供孩子的西元出生年月日（YYYY-MM-DD），以便開始語言篩檢。\n輸入出生年月日後請稍加等待，bot需要時間回應。\n\n輸入「返回」回到主選單。"
         elif user_message == "提升":
             user_states[user_id] = {"mode": MODE_TIPS}
             response_text = "幼兒語言發展建議：\n- 與孩子多對話，描述日常事物。\n- 用簡單但完整的句子與孩子交流。\n- 讀繪本、唱童謠、玩互動遊戲來促進語言學習。\n\n輸入「返回」回到主選單。"
@@ -266,6 +266,7 @@ def handle_message(event):
         current_index = state["current_index"]
         score = state["score"]
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
+        
 
         if questions:
             current_group = int(questions[0]['組別'])
@@ -274,6 +275,8 @@ def handle_message(event):
             user_states[user_id] = {"mode": MODE_MAIN_MENU}
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
+        
+        print("篩檢開始")
 
         if current_index >= len(questions):
             total_questions = len(questions)
@@ -281,6 +284,7 @@ def handle_message(event):
 
             if pass_percentage == 1.0 and current_group < 9:  
                 # 順向施測（進入下一組）
+                print("進行順向")
                 next_group = current_group + 1
                 min_age_in_group = get_min_age_for_group(next_group)
                 new_questions = get_questions_by_age(min_age_in_group)
@@ -300,6 +304,7 @@ def handle_message(event):
 
             elif pass_percentage < 1.0 and current_group > 1:
                 # 逆向施測（進入上一組）
+                print("進行逆向")
                 previous_group = current_group - 1
                 min_age_in_group = get_min_age_for_group(previous_group)
                 new_questions = get_questions_by_age(min_age_in_group)
@@ -321,7 +326,8 @@ def handle_message(event):
                 # 沒有順向/逆向施測，正常結束
                 response_text = f"✅篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
                 user_states[user_id] = {"mode": MODE_MAIN_MENU}
-
+        else:
+            print("未進行順向逆向")
 
         # **取得目前這題的題號
         current_question = questions[current_index]
