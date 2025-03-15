@@ -230,7 +230,7 @@ def handle_message(event):
                         "current_index": 0,
                         "score": 0
                     }
-                    response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n\n第 1 題：{questions[0]}\n\n輸入「返回」可中途退出篩檢。"
+                    response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n\n第 1 題：{questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
                 else:
                     response_text = "無法找到適合此年齡的篩檢題目，請確認 Google Sheets 設定是否正確。\n\n輸入「返回」回到主選單。"
                     user_states[user_id] = {"mode": MODE_MAIN_MENU}
