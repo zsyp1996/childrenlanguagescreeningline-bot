@@ -384,7 +384,7 @@ def handle_message(event):
             return
 
         # **取得目前這題的題號
-        current_question = questions[current_index]['題目']
+        current_question = questions[current_index]
         question_number = current_question["題號"]
 
         # **遍歷 Google Sheets，根據「題號」找到正確的行號
@@ -504,7 +504,7 @@ def handle_message(event):
             return
 
         # **取得目前這題的題號
-        current_question = questions[current_index]['題目']
+        current_question = questions[current_index]
         question_number = current_question["題號"]
 
         # **遍歷 Google Sheets，根據「題號」找到正確的行號
