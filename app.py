@@ -117,18 +117,14 @@ def get_questions_by_age(months):
         questions = []  # 存放符合條件的題目
 
         for row in sheet_data[1:]:  # 跳過標題列
-            age_range = row[0]  # 年齡區間（例如 "9-12 個月" 或 "14 個月"）
+            age_range = row[0]  # 年齡區間（例如 "0-4個月", "9-12個月"）
             question = row[2]  # 題目內容
 
-            # **檢查該題目是否符合目前的年齡
-            if "-" in age_range:
-                min_age, max_age = map(int, re.findall(r'\d+', age_range))
+            # **解析 "X-Y個月" 這種類型**
+            match = re.findall(r'\d+', age_range)
+            if len(match) == 2:  # 只考慮 "X-Y個月" 這種類型
+                min_age, max_age = map(int, match)
                 if min_age <= months <= max_age:
-                    questions.append(question)
-            else:
-                # 處理單一月齡（如「14個月」）
-                single_age = int(re.search(r'\d+', age_range).group())
-                if single_age == months:
                     questions.append(question)
 
         return questions if questions else None  # 若沒有符合的題目則回傳 None
@@ -277,9 +273,7 @@ def handle_message(event):
         **請務必只回應「符合」、「不符合」或「不清楚」，不要任何額外文字、符號或解釋！**
         """
 
-        print("送給deepseek的prompt")
-        print(deepseek_prompt) # Debug 記錄 deepseek prompt
-
+        print(current_question, hint, pass_criteria, user_message, sep="\n")
         deepseek_response = chat_with_deepseek(deepseek_prompt).strip()
         print(f"deepseek 判斷：{deepseek_response}")  # Debug 記錄 deepseek 回應
 
@@ -294,9 +288,9 @@ def handle_message(event):
             response_text = "了解，現在進入下一題。\n\n"
         elif deepseek_response.startswith("不清楚"):
             # **若回答不清楚，提供簡單易懂的提示
-            hint_prompt = f"請基於以下提示，使用 20 字內的簡單語言解釋：{hint}"
+            hint_prompt = f"請基於以下提示，使用30字內的解釋，要簡單平易近人不要列點：{hint}"
             hint_response = chat_with_deepseek(hint_prompt).strip()
-            response_text = f"⚠️本題的意思為：{hint_response}\n請再試一次。"
+            response_text = f"你的回答不是很清楚，本題的意思是：{hint_response}\n請再回覆一次。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
         else:
