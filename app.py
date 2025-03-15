@@ -200,7 +200,7 @@ def handle_message(event):
     if user_mode == MODE_MAIN_MENU:
         if user_message == "篩檢":
             user_states[user_id] = {"mode": MODE_SCREENING}
-            response_text = "請提供孩子的西元出生年月日（YYYY-MM-DD），以便開始語言篩檢。\n輸入出生年月日後請稍加等待，bot需要時間回應。\n\n輸入「返回」回到主選單。"
+            response_text = "請提供孩子的西元出生年月日（格式：YYYY-MM-DD），以便開始語言篩檢。\n\n輸入「返回」回到主選單。"
         elif user_message == "提升":
             user_states[user_id] = {"mode": MODE_TIPS}
             response_text = "幼兒語言發展建議：\n- 與孩子多對話，描述日常事物。\n- 用簡單但完整的句子與孩子交流。\n- 讀繪本、唱童謠、玩互動遊戲來促進語言學習。\n\n輸入「返回」回到主選單。"
@@ -224,12 +224,7 @@ def handle_message(event):
 
     # **篩檢模式（計算年齡）
     if user_mode == MODE_SCREENING:
-        deepseek_prompt = f"將這個日期(無論西元或民國年)轉為西元 YYYY-MM-DD 格式，請只輸出日期不要有任何額外的解釋：{user_message}"
-        deepseek_response = chat_with_deepseek(deepseek_prompt)
-
-        print("deepseek回應:", deepseek_response)
-
-        match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", deepseek_response)
+        match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", user_message)
         if match:
             birth_date = datetime.strptime(match.group(0), "%Y-%m-%d").date()
             total_months = calculate_age(str(birth_date))
@@ -247,7 +242,9 @@ def handle_message(event):
                         "mode": MODE_TESTING,
                         "questions": questions,
                         "current_index": 0,
-                        "score": 0
+                        "score": 0,
+                        "group": group,
+                        "min_age_in_group": min_age_in_group
                     }
                     response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n注意：bot需要時間回應，請在回答完每個問題後稍加等待並盡量避免錯別字，謝謝。\n\n題目：{questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
                 else:
@@ -267,7 +264,6 @@ def handle_message(event):
         score = state["score"]
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
         
-
         if questions:
             current_group = int(questions[0]['組別'])
         else:
