@@ -230,7 +230,7 @@ def handle_message(event):
                         "current_index": 0,
                         "score": 0
                     }
-                    response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n\n第 1 題：{questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
+                    response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n注意：bot需要時間回應，請在回答完每個問題後稍加等待並盡量避免錯別字，謝謝。\n\n第 1 題：{questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
                 else:
                     response_text = "無法找到適合此年齡的篩檢題目，請確認 Google Sheets 設定是否正確。\n\n輸入「返回」回到主選單。"
                     user_states[user_id] = {"mode": MODE_MAIN_MENU}
@@ -302,7 +302,7 @@ def handle_message(event):
             response_text = "了解，現在進入下一題。\n\n"
         elif deepseek_response.startswith("不清楚"):
             # **若回答不清楚，提供簡單易懂的提示
-            hint_prompt = f"請基於以下提示使用30字內的解釋回應使用者，要簡單平易近人不要列點：{hint}"
+            hint_prompt = f"使用者因為回應模糊或不清楚題目意思而需提示，請基於以下題目與例子生成30字內的提示回應使用者，要簡單平易近人不要列點。題目：{current_question['題目']}，例子：{hint}"
             hint_response = chat_with_deepseek(hint_prompt).strip()
             response_text = f"{hint_response}\n請再回覆一次。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -316,7 +316,7 @@ def handle_message(event):
 
         # **如果還有下一題，繼續篩檢
         if current_index < len(questions):
-            response_text += f"第 {current_index + 1} 題：{questions[current_index]}\n\n輸入「返回」可中途退出篩檢。"
+            response_text += f"第 {current_index + 1} 題：{questions[current_index]['題目']}\n\n輸入「返回」可中途退出篩檢。"
         else:
             # **題目問完，顯示總分
             response_text = f"✅篩檢結束！\n您的孩子在測驗中的總得分為：{score} 分。\n\n請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。\n\n輸入「返回」回到主選單。"
