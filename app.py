@@ -248,7 +248,6 @@ def handle_message(event):
                         "questions": questions,
                         "current_index": 0,
                         "score": 0
-                        "min_age_in_group": min_age_in_group
                     }
                     response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n注意：bot需要時間回應，請在回答完每個問題後稍加等待並盡量避免錯別字，謝謝。\n\n題目：{questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
                 else:
