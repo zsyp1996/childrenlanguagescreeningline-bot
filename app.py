@@ -4,6 +4,7 @@ import re
 import gspread
 import json
 import base64
+import time
 from google.oauth2.service_account import Credentials
 from flask import Flask, request
 from linebot import LineBotApi, WebhookHandler
@@ -42,15 +43,39 @@ else:
     print("無法獲取 GOOGLE_SERVICE_ACCOUNT_JSON，請確認環境變數是否正確設定！")
 
 # **與 DeepSeek 互動的函式**
-def chat_with_deepseek(prompt):
-    response = client.chat.completions.create(
-        model="deepseek-chat",  # 使用 DeepSeek 模型名稱
-        messages=[
-            {"role": "system", "content": "你是一個語言篩檢助手，負責回答家長的問題與記錄兒童的語言發展情況，請提供幫助。請使用繁體中文回答。"},
-            {"role": "user", "content": prompt}
-        ]
-    )
-    return response.choices[0].message.content  # 解析響應格式與 OpenAI 相同
+def chat_with_deepseek(prompt, retry_count=2):
+    for attempt in range(retry_count + 1):
+        try:
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "system", "content": "你是一個語言篩檢助手，負責回答家長的問題與記錄兒童的語言發展情況，請提供幫助。請使用繁體中文回答。"},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            error_type = type(e).__name__
+            print(f"DeepSeek API 錯誤 (嘗試 {attempt+1}/{retry_count+1}): {error_type} - {str(e)}")
+            
+            # 最後一次嘗試失敗時
+            if attempt == retry_count:
+                # 判斷錯誤類型
+                if "Unauthorized" in str(e) or "Invalid" in str(e):
+                    print("API 金鑰錯誤或授權問題")
+                    return "系統暫時無法處理您的回應，請稍後再試。"
+                elif "Timeout" in str(e) or "Connection" in str(e):
+                    print("網路連線問題")
+                    return "系統回應緩慢，請稍後再試。"
+                elif "Rate" in str(e) or "Too many" in str(e):
+                    print("速率限制問題")
+                    return "系統暫時繁忙，請稍後再試。"
+                else:
+                    print("其他 API 錯誤")
+                    return "系統處理您的回應時出現問題，請稍後再試。"
+            
+            # 非最後一次嘗試，等待後重試
+            time.sleep(1)  # 添加延遲再重試
 
 # **Flask 路由（API 入口點）**
 @app.route("/", methods=["GET"])
@@ -345,9 +370,9 @@ def handle_message(event):
 
         else:
             pass_percentage = score_all_first / len(questions)  # 計算通過比例
-            user_states[user_id][score_all_first] = score_all_first
-            user_states[user_id][score_r_first] = score_r_first
-            user_states[user_id][score_e_first] = score_e_first
+            user_states[user_id]["score_all_first"] = score_all_first
+            user_states[user_id]["score_r_first"] = score_r_first
+            user_states[user_id]["score_e_first"] = score_e_first
 
             if pass_percentage == 1.0:
                 if current_group < 9:
@@ -368,7 +393,7 @@ def handle_message(event):
                 else:
                     # 位於最後一個月齡組
                     print("位於最後一個月齡組，進入計分模式。")
-                    user_states[user_id]["mode"] = MODE_SCORE
+                    user_states[user_id] = {"mode": MODE_SCORE}
 
             elif pass_percentage < 1.0:
                 if current_group > 1:
@@ -389,7 +414,7 @@ def handle_message(event):
                 else:
                     # 位於第一個月齡組
                     print("位於第一個月齡組，進入計分模式。")
-                    user_states[user_id]["mode"] = MODE_SCORE
+                    user_states[user_id] = {"mode": MODE_SCORE}
 
     ## **順向篩檢
     if user_mode == MODE_TESTING_FORWARD:
@@ -400,8 +425,6 @@ def handle_message(event):
         score_r_forward = state["score_r"]
         score_e_forward = state["score_e"]
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
-    
-        print("第", current_group, "組數量：", len(questions))###
 
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
@@ -410,6 +433,8 @@ def handle_message(event):
         question_type = current_question["類別"] # 取得類別
         hint = current_question["提示"] # 取得提示
         pass_criteria = current_question["通過標準"] # 取得通過標準
+
+        print("第", current_group, "組數量：", len(questions))###
 
         # **讓 deepseek 根據題目、提示、通過標準來判斷使用者回應
         deepseek_prompt = f"""
@@ -497,14 +522,17 @@ def handle_message(event):
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                     return
                 else:
-                    print("找不到新題組")
+                    response_text = "找不到新題組，系統出現錯誤。返回主選單。"
+                    user_states[user_id] = {"mode": MODE_MAIN_MENU}
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+                    return
 
             else:
                 print("順向篩檢結束，進入計分模式")
-                user_states[user_id][score_all_forward] = score_all_forward
-                user_states[user_id][score_r_forward] = score_r_forward
-                user_states[user_id][score_e_forward] = score_e_forward
-                user_states[user_id]["mode"] = MODE_SCORE
+                user_states[user_id]["score_all_forward"] = score_all_forward
+                user_states[user_id]["score_r_forward"] = score_r_forward
+                user_states[user_id]["score_e_forward"] = score_e_forward
+                user_states[user_id] = {"mode": MODE_SCORE}
 
     ##逆向篩檢     
     if user_mode == MODE_TESTING_BACKWARD:
@@ -515,8 +543,6 @@ def handle_message(event):
         score_r_backward = state["score_r"]
         score_e_backward = state["score_e"]
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
-    
-        print("第", current_group, "組數量：", len(questions))###
 
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
@@ -525,6 +551,8 @@ def handle_message(event):
         question_type = current_question["類別"] # 取得類別
         hint = current_question["提示"] # 取得提示
         pass_criteria = current_question["通過標準"] # 取得通過標準
+
+        print("第", current_group, "組數量：", len(questions))###
 
         # **讓 deepseek 根據題目、提示、通過標準來判斷使用者回應
         deepseek_prompt = f"""
@@ -560,7 +588,7 @@ def handle_message(event):
                 
             else:
                 score_r_backward += 1
-                score_e_backwardd += 1
+                score_e_backward += 1
                 user_states[user_id]["score_r"] = score_r_backward
                 user_states[user_id]["score_e"] = score_e_backward
             print("第", current_group, "組第幾題：", current_index, "現在總分：", score_all_backward, "現在R分：", score_r_backward, "現在E分：", score_e_backward)
@@ -612,14 +640,17 @@ def handle_message(event):
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                     return
                 else:
-                    print("找不到新題組")
+                    response_text = "找不到新題組，系統出現錯誤。返回主選單。"
+                    user_states[user_id] = {"mode": MODE_MAIN_MENU}
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+                    return
 
             else:
                 print("順向篩檢結束，進入計分模式")
-                user_states[user_id][score_all_backward] = score_all_backward
-                user_states[user_id][score_r_backward] = score_r_backward
-                user_states[user_id][score_e_backward] = score_e_backward
-                user_states[user_id]["mode"] = MODE_SCORE
+                user_states[user_id]["score_all_backward"] = score_all_backward
+                user_states[user_id]["score_r_backward"] = score_r_backward
+                user_states[user_id]["score_e_backward"] = score_e_backward
+                user_states[user_id] = {"mode": MODE_SCORE}
 
     if user_mode == MODE_SCORE:
         state = user_states[user_id]
