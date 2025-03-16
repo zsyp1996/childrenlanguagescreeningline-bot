@@ -430,13 +430,13 @@ def handle_message(event):
                     score_e_final = score_e_first + 33 # 第1-8組E分數加總為33，加上第9組E分數即為總分。
                     evaluate_result = evaluate_development(score_all_final, original_group)
                     response_text = f"""篩檢結束，總分為{score_all_final}分。
-                    理解性分數為{score_r_final}分。
-                    表達性分數為{score_e_final}分。
-                    評估結果為：{evaluate_result}。
+理解性分數為{score_r_final}分。
+表達性分數為{score_e_final}分。
+評估結果為：{evaluate_result}。
 
-                    請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
                     
-                    輸入「返回」回到主選單。
+輸入「返回」回到主選單。
                     """
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                     user_states[user_id] = {"mode": MODE_MAIN_MENU}
@@ -465,13 +465,13 @@ def handle_message(event):
                     score_e_final = score_e_first # 第1組E分數即為總分。
                     evaluate_result = evaluate_development(score_all_final, original_group)
                     response_text = f"""篩檢結束，總分為{score_all_final}分。
-                    理解性分數為{score_r_final}分。
-                    表達性分數為{score_e_final}分。
-                    評估結果為：{evaluate_result}。
+理解性分數為{score_r_final}分。
+表達性分數為{score_e_final}分。
+評估結果為：{evaluate_result}。
 
-                    請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
                     
-                    輸入「返回」回到主選單。
+輸入「返回」回到主選單。
                     """
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                     user_states[user_id] = {"mode": MODE_MAIN_MENU}
@@ -492,7 +492,6 @@ def handle_message(event):
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
         current_group = int(questions[0]['組別']) # 取得組別
-        #question_number = current_question["題號"] # 取得題號
         question_type = current_question["類別"] # 取得類別
         hint = current_question["提示"] # 取得提示
         pass_criteria = current_question["通過標準"] # 取得通過標準
@@ -591,18 +590,18 @@ def handle_message(event):
                     return
 
             else:
-                score_all_final = get_group_all_score(current_group - 1) + score_all_forward # 總分=當前組數減一所有組數的總分加上當前組的分數
-                score_r_final = get_group_r_score(current_group - 1) + score_r_forward
-                score_e_final = get_group_e_score(current_group - 1) + score_e_forward
+                score_all_final = get_group_all_score(original_group) + score_all_forward # 總分=當前組數減一所有組數的總分加上當前組的分數
+                score_r_final = get_group_r_score(original_group) + score_r_forward
+                score_e_final = get_group_e_score(original_group) + score_e_forward
                 evaluate_result = evaluate_development(score_all_final, original_group)
                 response_text = f"""篩檢結束，總分為{score_all_final}分。
-                理解性分數為{score_r_final}分。
-                表達性分數為{score_e_final}分。
-                評估結果為：{evaluate_result}。
+理解性分數為{score_r_final}分。
+表達性分數為{score_e_final}分。
+評估結果為：{evaluate_result}。
 
-                請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
                 
-                輸入「返回」回到主選單。
+輸入「返回」回到主選單。
                 """
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                 user_states[user_id] = {"mode": MODE_MAIN_MENU}
@@ -732,13 +731,13 @@ def handle_message(event):
                     score_e_final = get_group_e_score(current_group - 1)+ score_e_first + score_e_backward
                     evaluate_result = evaluate_development(score_all_final, original_group)
                     response_text = f"""篩檢結束，總分為{score_all_final}分。
-                    理解性分數為{score_r_final}分。
-                    表達性分數為{score_e_final}分。
-                    評估結果為：{evaluate_result}。
+理解性分數為{score_r_final}分。
+表達性分數為{score_e_final}分。
+評估結果為：{evaluate_result}。
 
-                    請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
                     
-                    輸入「返回」回到主選單。
+輸入「返回」回到主選單。
                     """
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                     user_states[user_id] = {"mode": MODE_MAIN_MENU}
@@ -750,13 +749,13 @@ def handle_message(event):
                     score_e_final = score_e_first + score_e_backward
                     evaluate_result = evaluate_development(score_all_final, original_group)
                     response_text = f"""篩檢結束，總分為{score_all_final}分。
-                    理解性分數為{score_r_final}分。
-                    表達性分數為{score_e_final}分。
-                    評估結果為：{evaluate_result}。
+理解性分數為{score_r_final}分。
+表達性分數為{score_e_final}分。
+評估結果為：{evaluate_result}。
 
-                    請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
                     
-                    輸入「返回」回到主選單。
+輸入「返回」回到主選單。
                     """
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                     user_states[user_id] = {"mode": MODE_MAIN_MENU}
