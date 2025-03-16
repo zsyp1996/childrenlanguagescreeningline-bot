@@ -338,6 +338,8 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
         
+        ##若在最大或最小月齡組會觸發逆向或順向應再修正
+
         else:
             pass_percentage = score_first / len(questions)  # 計算通過比例
 
