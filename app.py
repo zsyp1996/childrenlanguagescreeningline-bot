@@ -270,7 +270,7 @@ def handle_message(event):
         print("進行原月齡組題組", current_index, score_first)###
 
         # **取得目前這題的題號
-        current_question = questions[current_index]['題目']
+        current_question = questions[current_index]
         question_number = current_question["題號"]
 
         # **遍歷 Google Sheets，根據「題號」找到正確的行號
@@ -338,8 +338,6 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
         
-        ##若在最大或最小月齡組會觸發逆向或順向應再修正
-
         else:
             pass_percentage = score_first / len(questions)  # 計算通過比例
 
@@ -386,7 +384,7 @@ def handle_message(event):
             return
 
         # **取得目前這題的題號
-        current_question = questions[current_index]['題目']
+        current_question = questions[current_index]
         question_number = current_question["題號"]
 
         # **遍歷 Google Sheets，根據「題號」找到正確的行號
@@ -506,7 +504,7 @@ def handle_message(event):
             return
 
         # **取得目前這題的題號
-        current_question = questions[current_index]['題目']
+        current_question = questions[current_index]
         question_number = current_question["題號"]
 
         # **遍歷 Google Sheets，根據「題號」找到正確的行號
