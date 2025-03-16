@@ -339,7 +339,7 @@ def handle_message(event):
         user_states[user_id]["current_index"] = current_index
 
         if current_index < len(questions):
-            response_text += f"題目：{questions[current_index]["題目"]}\n\n輸入「返回」可中途退出篩檢。"
+            response_text += f"題目：{questions[current_index]['題目']}\n\n輸入「返回」可中途退出篩檢。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
 
@@ -470,7 +470,7 @@ def handle_message(event):
         user_states[user_id]["current_index"] = current_index
 
         if current_index < len(questions):
-            response_text += f"題目：{questions[current_index]["題目"]}\n\n輸入「返回」可中途退出篩檢。"
+            response_text += f"題目：{questions[current_index]['題目']}\n\n輸入「返回」可中途退出篩檢。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
         else:
@@ -585,7 +585,7 @@ def handle_message(event):
         user_states[user_id]["current_index"] = current_index
 
         if current_index < len(questions):
-            response_text += f"題目：{questions[current_index]["題目"]}\n\n輸入「返回」可中途退出篩檢。"
+            response_text += f"題目：{questions[current_index]['題目']}\n\n輸入「返回」可中途退出篩檢。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
         else:
