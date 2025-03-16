@@ -115,20 +115,22 @@ def get_questions_by_age(months):
     try:
         sheet_data = sheet.get_all_values()  # 讀取試算表
         questions = []  # 存放符合條件的題目
-        current_group = None  # 用於存儲當前組別
 
         for row in sheet_data[1:]:  # 跳過標題列
-            group_number = int(row[0])  # 組別欄
             age_range = row[1]  # 年齡區間（例如 "0-4個月"）
-            question_number = row[2]  # 題號（第二欄）
-            question_text = row[3]  # 題目內容（第三欄）
+            group_number = int(row[0])  # 組別欄
+            question_number = row[2]  # 題號（第三欄）
+            question_text = row[3]  # 題目內容（第四欄）
+            question_type = row[4]  # 題目類別R/E (第五欄)
+            hint = row[5]  # 提示 (第六欄)
+            pass_criteria = row[6]  # 通過標準 (第七欄)
 
             # **解析 "X-Y個月" 這種類型**
             match = re.findall(r'\d+', age_range)
             if len(match) == 2:  # 只考慮 "X-Y個月" 這種類型
                 min_age, max_age = map(int, match)
                 if min_age <= months <= max_age:
-                    questions.append({"組別": group_number, "題號": question_number, "題目": question_text})
+                    questions.append({"組別": group_number, "題號": question_number, "題目": question_text, "類別": question_type, "提示": hint, "通過標準": pass_criteria})
 
         return questions if questions else None
     except Exception as e:
@@ -165,6 +167,7 @@ MODE_TREATMENT = "語言治療資訊模式"
 MODE_TESTING_FIRST = "首組篩檢"
 MODE_TESTING_FORWARD = "順向施測"
 MODE_TESTING_BACKWARD = "逆向施測"
+MODE_SCORE = "計分模式"
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
@@ -223,6 +226,7 @@ def handle_message(event):
                 user_states[user_id] = {"mode": MODE_MAIN_MENU}
             else:
                 questions = get_questions_by_age(total_months)
+                print(questions)
                 if questions:
                     group = questions[0]["組別"]  # 取得題目所屬的組別
                     min_age_in_group = get_min_age_for_group(group)
@@ -338,6 +342,8 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
         
+        ##若在最大或最小月齡組會觸發逆向或順向應再修正
+
         else:
             pass_percentage = score_first / len(questions)  # 計算通過比例
 
