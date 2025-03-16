@@ -162,6 +162,32 @@ def get_questions_by_age(months):
         print("讀取 Google Sheets 失敗，錯誤訊息：", e)
         return None
 
+#  根據組別與總分判斷結果
+def evaluate_development(score_all_final, original_group):
+    standards = {
+        1: [2, 4, 7, 8, 9],
+        2: [8, 9, 9, 11, 13],
+        3: [11, 13, 14, 18, 19],
+        4: [17, 19, 21, 25, 28],
+        5: [22, 24, 25, 33, 38],
+        6: [25, 30, 31, 42, 45],
+        7: [33, 36, 44, 48, 50],
+        8: [37, 43, 48, 50, 50],
+        9: [44, 48, 50, 50, 50]
+    }
+    threshold = standards[original_group]
+
+    if score_all_final < threshold[0]:  # <5%
+        return "疑似遲緩"
+    elif score_all_final < threshold[1]:  # 5-25%
+        return "可能落後"
+    elif score_all_final < threshold[2]:  # 25-50%
+        return "平均水準"
+    elif score_all_final < threshold[3]:  # 50-75%
+        return "稍微超前"
+    else:  # >75%
+        return "超前"
+
 def get_min_age_for_group(group): # 記住每組最小年齡
     group_age_mapping = {1: 0, 2: 5, 3: 9, 4: 13, 5: 17, 6: 21, 7: 25, 8: 29, 9: 33}
     return group_age_mapping.get(group, None)  # 若組別無效，回傳 None
@@ -204,7 +230,6 @@ MODE_TREATMENT = "語言治療資訊模式"
 MODE_TESTING_FIRST = "首組篩檢"
 MODE_TESTING_FORWARD = "順向施測"
 MODE_TESTING_BACKWARD = "逆向施測"
-MODE_SCORE = "計分模式"
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
@@ -264,21 +289,19 @@ def handle_message(event):
                 user_states[user_id] = {"mode": MODE_MAIN_MENU}
             else:
                 questions = get_questions_by_age(total_months)
-                print("該月齡組題目資訊為：", questions)
+                print("首組月齡組題目資訊為：", questions)
                 if questions:
                     group = questions[0]["組別"]  # 取得題目所屬的組別
                     min_age_in_group = get_min_age_for_group(group)
 
                     user_states[user_id] = {
                         "mode": MODE_TESTING_FIRST,
-                        "status": "First",
+                        "total_months": total_months,
                         "questions": questions,
                         "current_index": 0,
                         "score_all": 0, "score_r": 0, "score_e": 0,
                         "score_all_first": 0, "score_r_first": 0, "score_e_first": 0,
-                        "score_all_forward":0, "score_r_forward":0 ,"score_e_forward": 0,
-                        "score_all_backward":0, "score_r_backward":0 ,"score_e_backward":0,
-                        "score_all_final":0, "score_r_final":0, "score_e_final":0,
+                        "original_group": group,
                         "group": group,
                         "min_age_in_group": min_age_in_group
                     }
@@ -302,6 +325,7 @@ def handle_message(event):
         score_all_first = state["score_all"]
         score_r_first = state["score_r"]
         score_e_first = state["score_e"]
+        original_group = state["original_group"]
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
     
         print("首組數量：", len(questions))###
@@ -378,7 +402,10 @@ def handle_message(event):
             return
 
         else:
-            pass_percentage = score_all_first / len(questions)  # 計算通過比例
+            pass_percentage = score_all_first / len(questions)  # 計算通過比例\
+            user_states[user_id]["score_all_first"] =  score_all_first
+            user_states[user_id]["score_r_first"] =  score_r_first
+            user_states[user_id]["score_e_first"] =  score_e_first
 
             if pass_percentage == 1.0:
                 if current_group < 9:
@@ -401,11 +428,19 @@ def handle_message(event):
                     score_all_final = score_all_first + 44 # 第1-8組分數加總為44，加上第9組分數即為總分。
                     score_r_final = score_r_first + 23 # 第1-8組R分數加總為23，加上第9組R分數即為總分。
                     score_e_final = score_e_first + 33 # 第1-8組E分數加總為33，加上第9組E分數即為總分。
-                    user_states[user_id]["score_all_final"] = score_all_final
-                    user_states[user_id]["score_r_final"] = score_r_final
-                    user_states[user_id]["score_e_final"] = score_e_final
-                    print("位於最後一個月齡組。總分為：", score_all_final, "R總分為：", score_r_final, "E總分為：", score_e_final, "，進入常模模式。")
-                    user_states[user_id]["mode"] = MODE_SCORE
+                    evaluate_result = evaluate_development(score_all_final, original_group)
+                    response_text = f"""篩檢結束，總分為{score_all_final}分。
+                    理解性分數為{score_r_final}分。
+                    表達性分數為{score_e_final}分。
+                    評估結果為：{evaluate_result}。
+
+                    請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+                    
+                    輸入「返回」回到主選單。
+                    """
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+                    user_states[user_id] = {"mode": MODE_MAIN_MENU}
+                    return
 
             elif pass_percentage < 1.0:
                 if current_group > 1:
@@ -428,11 +463,20 @@ def handle_message(event):
                     score_all_final = score_all_first # 第1組分數即為總分。
                     score_r_final = score_r_first # 第1組R分數即為總分。
                     score_e_final = score_e_first # 第1組E分數即為總分。
-                    user_states[user_id]["score_all_final"] = score_all_final
-                    user_states[user_id]["score_r_final"] = score_r_final
-                    user_states[user_id]["score_e_final"] = score_e_final
-                    print("位於第一個月齡組。總分為：", score_all_final, "R總分為：", score_r_final, "E總分為：", score_e_final, "，進入常模模式。")
-                    user_states[user_id]["mode"] = MODE_SCORE
+                    evaluate_result = evaluate_development(score_all_final, original_group)
+                    response_text = f"""篩檢結束，總分為{score_all_final}分。
+                    理解性分數為{score_r_final}分。
+                    表達性分數為{score_e_final}分。
+                    評估結果為：{evaluate_result}。
+
+                    請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+                    
+                    輸入「返回」回到主選單。
+                    """
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+                    user_states[user_id] = {"mode": MODE_MAIN_MENU}
+                    return
+                    
 
     ## **順向篩檢
     if user_mode == MODE_TESTING_FORWARD:
@@ -442,6 +486,7 @@ def handle_message(event):
         score_all_forward = state["score_all"]
         score_r_forward = state["score_r"]
         score_e_forward = state["score_e"]
+        original_group = state["original_group"]
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
 
         # **取得目前這題的資料
@@ -541,28 +586,41 @@ def handle_message(event):
                     return
                 else:
                     response_text = "找不到新題組，系統出現錯誤。返回主選單。"
-                    user_states[user_id] = {"mode": MODE_MAIN_MENU}
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+                    user_states[user_id] = {"mode": MODE_MAIN_MENU}
                     return
 
             else:
                 score_all_final = get_group_all_score(current_group - 1) + score_all_forward # 總分=當前組數減一所有組數的總分加上當前組的分數
                 score_r_final = get_group_r_score(current_group - 1) + score_r_forward
                 score_e_final = get_group_e_score(current_group - 1) + score_e_forward
-                user_states[user_id]["score_all_final"] = score_all_final
-                user_states[user_id]["score_r_final"] = score_r_final
-                user_states[user_id]["score_e_final"] = score_e_final
-                print("順向施測至", current_group, "組。總分為：", score_all_final, "R總分為：", score_r_final, "E總分為：", score_e_final, "，進入常模模式。")
-                user_states[user_id]["mode"] = MODE_SCORE
+                evaluate_result = evaluate_development(score_all_final, original_group)
+                response_text = f"""篩檢結束，總分為{score_all_final}分。
+                理解性分數為{score_r_final}分。
+                表達性分數為{score_e_final}分。
+                評估結果為：{evaluate_result}。
+
+                請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+                
+                輸入「返回」回到主選單。
+                """
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+                user_states[user_id] = {"mode": MODE_MAIN_MENU}
+                return
+                
 
     ##逆向篩檢     
     if user_mode == MODE_TESTING_BACKWARD:
         state = user_states[user_id]
         questions = state["questions"]
         current_index = state["current_index"]
+        score_all_first = state["score_all_first"]
+        score_r_first = state["score_r_first"]
+        score_e_first = state["score_e_first"]
         score_all_backward = state["score_all"]
         score_r_backward = state["score_r"]
         score_e_backward = state["score_e"]
+        original_group = state["original_group"]
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
 
         # **取得目前這題的資料
@@ -660,6 +718,7 @@ def handle_message(event):
                     response_text = f"題目：{new_questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                     return
+                
                 else:
                     response_text = "找不到新題組，系統出現錯誤。返回主選單。"
                     user_states[user_id] = {"mode": MODE_MAIN_MENU}
@@ -667,26 +726,41 @@ def handle_message(event):
                     return
 
             else:
-                score_all_final = get_group_all_score(current_group - 1) + score_all_backward # 總分=當前組數減一所有組數的總分加上當前組的分數
-                score_r_final = get_group_r_score(current_group - 1) + score_r_backward
-                score_e_final = get_group_e_score(current_group - 1) + score_e_backward
-                user_states[user_id]["score_all_final"] = score_all_final
-                user_states[user_id]["score_r_final"] = score_r_final
-                user_states[user_id]["score_e_final"] = score_e_final
-                print("逆向施測至", current_group, "組。總分為：", score_all_final, "R總分為：", score_r_final, "E總分為：", score_e_final, "，進入常模模式。")
-                user_states[user_id]["mode"] = MODE_SCORE
+                if current_group > 1: # 確保如果逆向到第一組current_group - 1不會等於零
+                    score_all_final = get_group_all_score(current_group - 1) + score_all_first + score_all_backward # 總分=當前組數減一所有組數的總分+逆向施測分數+首組分數
+                    score_r_final = get_group_r_score(current_group - 1) + score_r_first + score_r_backward
+                    score_e_final = get_group_e_score(current_group - 1)+ score_e_first + score_e_backward
+                    evaluate_result = evaluate_development(score_all_final, original_group)
+                    response_text = f"""篩檢結束，總分為{score_all_final}分。
+                    理解性分數為{score_r_final}分。
+                    表達性分數為{score_e_final}分。
+                    評估結果為：{evaluate_result}。
 
-    if user_mode == MODE_SCORE:
-        print("判斷常模")
-        state = user_states[user_id]
-        #status = state["status"]
-        score_all_final = state["score_all_final"]
-        score_r_final = state["score_r_final"]
-        score_e_final = state["score_e_final"]
+                    請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+                    
+                    輸入「返回」回到主選單。
+                    """
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+                    user_states[user_id] = {"mode": MODE_MAIN_MENU}
+                    return
 
-        response_text = f"總成績：{score_all_final}，R成績：{score_r_final}，E成績：{score_e_final}"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
-        return
+                else: # 如果逆向到第一組則逆向施測分數加上首組分數等於總分
+                    score_all_final = score_all_first + score_all_backward
+                    score_r_final = score_r_first + score_r_backward
+                    score_e_final = score_e_first + score_e_backward
+                    evaluate_result = evaluate_development(score_all_final, original_group)
+                    response_text = f"""篩檢結束，總分為{score_all_final}分。
+                    理解性分數為{score_r_final}分。
+                    表達性分數為{score_e_final}分。
+                    評估結果為：{evaluate_result}。
+
+                    請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+                    
+                    輸入「返回」回到主選單。
+                    """
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+                    user_states[user_id] = {"mode": MODE_MAIN_MENU}
+                    return
 
 # **啟動 Flask 應用**
 if __name__ == "__main__":
