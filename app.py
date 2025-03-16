@@ -301,7 +301,6 @@ def handle_message(event):
                         "current_index": 0,
                         "score_all_current": 0,
                         "score_all": 0, "score_r": 0, "score_e": 0,
-                        "score_all_first": 0, "score_r_first": 0, "score_e_first": 0,
                         "original_group": group,
                         "group": group,
                         "min_age_in_group": min_age_in_group
@@ -407,9 +406,6 @@ def handle_message(event):
 
         else:
             pass_percentage = score_all_first / len(questions)  # 計算通過比例
-            user_states[user_id]["score_all_first"] =  score_all_first
-            user_states[user_id]["score_r_first"] =  score_r_first
-            user_states[user_id]["score_e_first"] =  score_e_first
 
             if pass_percentage == 1.0:
                 if current_group < 9:
@@ -455,7 +451,6 @@ def handle_message(event):
                     user_states[user_id]["min_age_in_group"] = get_min_age_for_group(current_group - 1)
                     user_states[user_id]["questions"] = get_questions_by_age(get_min_age_for_group(current_group - 1))
                     user_states[user_id]["current_index"] = 0
-                    user_states[user_id]["score_all_current"] = 0
                     user_states[user_id]["score_r"] = 0
                     user_states[user_id]["score_e"] = 0
                     response_text = f"題目：{user_states[user_id]['questions'][0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
@@ -617,9 +612,6 @@ def handle_message(event):
         questions = state["questions"]
         current_index = state["current_index"]
         score_all_backward_current = state["score_all_current"]
-        score_all_first = state["score_all_first"]
-        score_r_first = state["score_r_first"]
-        score_e_first = state["score_e_first"]
         score_all_backward_whole = state["score_all"]
         score_r_backward = state["score_r"]
         score_e_backward = state["score_e"]
@@ -730,9 +722,9 @@ def handle_message(event):
 
             else:
                 if current_group > 1: # 確保如果逆向到第一組current_group - 1不會等於零
-                    score_all_final = get_group_all_score(current_group - 1) + score_all_first + score_all_backward_whole # 總分=當前組數減一所有組數的總分+逆向施測分數+首組分數
-                    score_r_final = get_group_r_score(current_group - 1) + score_r_first + score_r_backward
-                    score_e_final = get_group_e_score(current_group - 1)+ score_e_first + score_e_backward
+                    score_all_final = get_group_all_score(current_group - 1) + score_all_backward_whole # 總分=當前組數減一所有組數的總分+逆向施測分數+首組分數
+                    score_r_final = get_group_r_score(current_group - 1) + score_r_backward
+                    score_e_final = get_group_e_score(current_group - 1) + score_e_backward
                     evaluate_result = evaluate_development(score_all_final, original_group)
                     response_text = f"""篩檢結束，總分為{score_all_final}分。
 理解性分數為{score_r_final}分。
@@ -747,9 +739,9 @@ def handle_message(event):
                     return
 
                 else: # 如果逆向到第一組則逆向施測分數加上首組分數等於總分
-                    score_all_final = score_all_first + score_all_backward_whole
-                    score_r_final = score_r_first + score_r_backward
-                    score_e_final = score_e_first + score_e_backward
+                    score_all_final = score_all_backward_whole
+                    score_r_final = score_r_backward
+                    score_e_final = score_e_backward
                     evaluate_result = evaluate_development(score_all_final, original_group)
                     response_text = f"""篩檢結束，總分為{score_all_final}分。
 理解性分數為{score_r_final}分。
