@@ -226,7 +226,7 @@ def handle_message(event):
                 user_states[user_id] = {"mode": MODE_MAIN_MENU}
             else:
                 questions = get_questions_by_age(total_months)
-                print(questions)
+                print(questions) ##
                 if questions:
                     group = questions[0]["組別"]  # 取得題目所屬的組別
                     min_age_in_group = get_min_age_for_group(group)
@@ -276,25 +276,13 @@ def handle_message(event):
         # **取得目前這題的題號
         current_question = questions[current_index]
         question_number = current_question["題號"]
-
-        # **遍歷 Google Sheets，根據「題號」找到正確的行號
-        question_row_index = None
-        for i, row in enumerate(sheet.get_all_values(), start=1):  # i 為試算表實際的行號（從 1 開始）
-            if row[2] == question_number:  # 題號在第三欄
-                question_row_index = i
-                break
-
-        # **確保找到對應的行號**
-        if question_row_index is not None:
-            pass_criteria = sheet.cell(question_row_index, 7).value  # 第7欄：通過標準
-            hint = sheet.cell(question_row_index, 6).value  # 第6欄：提示
-        else:
-            pass_criteria = "未找到通過標準"
-            hint = "未找到提示"
+        question_type = current_question["類別"]
+        hint = current_question["提示"]
+        pass_criteria = current_question["通過標準"]
 
         # **讓 deepseek 根據題目、提示、通過標準來判斷使用者回應
         deepseek_prompt = f"""
-        題目：{current_question['題目']}
+        題目：{current_question["題目"]}
         提示：{hint}
         通過標準：{pass_criteria}
         使用者回應：{user_message}
@@ -337,7 +325,7 @@ def handle_message(event):
 
         user_states[user_id]["current_index"] = current_index
 
-        if current_index + 1 < len(questions):
+        if current_index < len(questions):
             response_text += f"題目：{questions[current_index]['題目']}\n\n輸入「返回」可中途退出篩檢。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
