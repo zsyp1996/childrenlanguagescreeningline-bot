@@ -181,11 +181,11 @@ def evaluate_development(score_all_final, original_group):
         return "疑似遲緩"
     elif score_all_final < threshold[1]:  # 5-25%
         return "可能落後"
-    elif score_all_final < threshold[2]:  # 25-50%
+    elif score_all_final >= threshold[1] and score_all_final < threshold[3]:
         return "平均水準"
-    elif score_all_final < threshold[3]:  # 50-75%
+    elif score_all_final < threshold[4]:  # 75-90%
         return "稍微超前"
-    else:  # >75%
+    else:  # >90%
         return "超前"
 
 def get_min_age_for_group(group): # 記住每組最小年齡
@@ -299,13 +299,19 @@ def handle_message(event):
                         "total_months": total_months,
                         "questions": questions,
                         "current_index": 0,
+                        "score_all_current": 0,
                         "score_all": 0, "score_r": 0, "score_e": 0,
                         "score_all_first": 0, "score_r_first": 0, "score_e_first": 0,
                         "original_group": group,
                         "group": group,
                         "min_age_in_group": min_age_in_group
                     }
-                    response_text = f"您的孩子目前 {total_months} 個月大，現在開始篩檢。\n注意：bot需要時間回應，請在回答完每個問題後稍加等待並盡量避免錯別字，謝謝。\n\n題目：{questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
+                    response_text = f"""您的孩子目前 {total_months} 個月大，現在開始篩檢。
+注意：bot需要時間回應，請在回答完每個問題後稍加等待並不要再次純送訊息。請盡量避免錯別字，謝謝。
+
+題目：{questions[0]['題目']}
+
+輸入「返回」可中途退出篩檢。"""
 
                 else:
                     response_text = "無法找到適合此年齡的篩檢題目，請確認 Google Sheets 設定是否正確。\n\n輸入「返回」回到主選單。"
@@ -327,8 +333,6 @@ def handle_message(event):
         score_e_first = state["score_e"]
         original_group = state["original_group"]
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
-    
-        print("首組數量：", len(questions))###
 
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
@@ -402,7 +406,7 @@ def handle_message(event):
             return
 
         else:
-            pass_percentage = score_all_first / len(questions)  # 計算通過比例\
+            pass_percentage = score_all_first / len(questions)  # 計算通過比例
             user_states[user_id]["score_all_first"] =  score_all_first
             user_states[user_id]["score_r_first"] =  score_r_first
             user_states[user_id]["score_e_first"] =  score_e_first
@@ -436,8 +440,7 @@ def handle_message(event):
 
 請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
                     
-輸入「返回」回到主選單。
-                    """
+輸入「返回」回到主選單。"""
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                     user_states[user_id] = {"mode": MODE_MAIN_MENU}
                     return
@@ -452,7 +455,7 @@ def handle_message(event):
                     user_states[user_id]["min_age_in_group"] = get_min_age_for_group(current_group - 1)
                     user_states[user_id]["questions"] = get_questions_by_age(get_min_age_for_group(current_group - 1))
                     user_states[user_id]["current_index"] = 0
-                    user_states[user_id]["score_all"] = 0
+                    user_states[user_id]["score_all_current"] = 0
                     user_states[user_id]["score_r"] = 0
                     user_states[user_id]["score_e"] = 0
                     response_text = f"題目：{user_states[user_id]['questions'][0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
@@ -471,8 +474,7 @@ def handle_message(event):
 
 請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
                     
-輸入「返回」回到主選單。
-                    """
+輸入「返回」回到主選單。"""
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                     user_states[user_id] = {"mode": MODE_MAIN_MENU}
                     return
@@ -483,7 +485,8 @@ def handle_message(event):
         state = user_states[user_id]
         questions = state["questions"]
         current_index = state["current_index"]
-        score_all_forward = state["score_all"]
+        score_all_forward_current = state["score_all_current"] # score_all_forward_current指當前題組的分數
+        score_all_forward_whole = state["score_all"] # score_all_forward_whole指逆向施測總分
         score_r_forward = state["score_r"]
         score_e_forward = state["score_e"]
         original_group = state["original_group"]
@@ -519,8 +522,10 @@ def handle_message(event):
 
         # **根據 deepseek 回應處理邏輯
         if deepseek_response.startswith("符合"):
-            score_all_forward += 1
-            user_states[user_id]["score_all"] = score_all_forward
+            score_all_forward_current += 1
+            score_all_forward_whole += 1
+            user_states[user_id]["score_all_current"] = score_all_forward_current
+            user_states[user_id]["score_all"] = score_all_forward_whole
             current_index += 1
             if question_type == "R":
                 score_r_forward += 1
@@ -553,7 +558,7 @@ def handle_message(event):
             response_text = "❌無法判斷回應，請再試一次。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
-        print("第", current_group, "組第幾題：", current_index, "現在總分：", score_all_forward, "現在R分：", score_r_forward, "現在E分：", score_e_forward)
+        print("第", current_group, "組第幾題：", current_index, "現在總分：", score_all_forward_whole, "現在R分：", score_r_forward, "現在E分：", score_e_forward)
         user_states[user_id]["current_index"] = current_index
 
         if current_index < len(questions):
@@ -561,7 +566,7 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
         else:
-            pass_percentage = score_all_forward / len(questions)  # 計算通過比例
+            pass_percentage = score_all_forward_current / len(questions)  # 計算通過比例
 
             if pass_percentage == 1.0 and current_group < 9:  
                 # 順向施測（進入下一組）
@@ -576,9 +581,8 @@ def handle_message(event):
                         "min_age_in_group": min_age_in_group,
                         "questions": new_questions,
                         "current_index": 0,
-                        "score_all": score_all_forward,
-                        "score_r": score_r_forward,
-                        "score_e": score_e_forward
+                        "score_all_current":0,
+                        "score_all": score_all_forward_whole, "score_r": score_r_forward, "score_e": score_e_forward
                     })
                     response_text = f"題目：{new_questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -590,7 +594,7 @@ def handle_message(event):
                     return
 
             else:
-                score_all_final = get_group_all_score(original_group) + score_all_forward # 總分=當前組數減一所有組數的總分加上當前組的分數
+                score_all_final = get_group_all_score(original_group) + score_all_forward_whole # 總分=當前組數減一所有組數的總分加上當前組的分數
                 score_r_final = get_group_r_score(original_group) + score_r_forward
                 score_e_final = get_group_e_score(original_group) + score_e_forward
                 evaluate_result = evaluate_development(score_all_final, original_group)
@@ -601,8 +605,7 @@ def handle_message(event):
 
 請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
                 
-輸入「返回」回到主選單。
-                """
+輸入「返回」回到主選單。"""
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                 user_states[user_id] = {"mode": MODE_MAIN_MENU}
                 return
@@ -613,10 +616,11 @@ def handle_message(event):
         state = user_states[user_id]
         questions = state["questions"]
         current_index = state["current_index"]
+        score_all_backward_current = state["score_all_current"]
         score_all_first = state["score_all_first"]
         score_r_first = state["score_r_first"]
         score_e_first = state["score_e_first"]
-        score_all_backward = state["score_all"]
+        score_all_backward_whole = state["score_all"]
         score_r_backward = state["score_r"]
         score_e_backward = state["score_e"]
         original_group = state["original_group"]
@@ -625,7 +629,6 @@ def handle_message(event):
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
         current_group = int(questions[0]['組別']) # 取得組別
-        question_number = current_question["題號"] # 取得題號
         question_type = current_question["類別"] # 取得類別
         hint = current_question["提示"] # 取得提示
         pass_criteria = current_question["通過標準"] # 取得通過標準
@@ -653,8 +656,10 @@ def handle_message(event):
 
         # **根據 deepseek 回應處理邏輯
         if deepseek_response.startswith("符合"):
-            score_all_backward += 1
-            user_states[user_id]["score_all"] = score_all_backward
+            score_all_backward_current += 1
+            score_all_backward_whole += 1
+            user_states[user_id]["score_all_current"] = score_all_backward_current
+            user_states[user_id]["score_all"] = score_all_backward_whole
             current_index += 1
             if question_type == "R":
                 score_r_backward += 1
@@ -687,7 +692,7 @@ def handle_message(event):
             response_text = "❌無法判斷回應，請再試一次。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
-        print("第", current_group, "組第幾題：", current_index, "現在總分：", score_all_backward, "現在R分：", score_r_backward, "現在E分：", score_e_backward)
+        print("第", current_group, "組第幾題：", current_index, "現在總分：", score_all_backward_whole, "現在R分：", score_r_backward, "現在E分：", score_e_backward)
         user_states[user_id]["current_index"] = current_index
 
         if current_index < len(questions):
@@ -695,7 +700,7 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
         else:
-            pass_percentage = score_all_backward / len(questions)  # 計算通過比例
+            pass_percentage = score_all_backward_current / len(questions)  # 計算通過比例
 
             if pass_percentage < 1.0 and current_group > 1:  
                 # 逆向施測（進入上一組）
@@ -710,9 +715,8 @@ def handle_message(event):
                         "min_age_in_group": min_age_in_group,
                         "questions": new_questions,
                         "current_index": 0,
-                        "score_all": score_all_backward,
-                        "score_r": score_r_backward,
-                        "score_e": score_e_backward
+                        "score_all_current": 0,
+                        "score_all": score_all_backward_whole, "score_r": score_r_backward, "score_e": score_e_backward
                     })
                     response_text = f"題目：{new_questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -726,7 +730,7 @@ def handle_message(event):
 
             else:
                 if current_group > 1: # 確保如果逆向到第一組current_group - 1不會等於零
-                    score_all_final = get_group_all_score(current_group - 1) + score_all_first + score_all_backward # 總分=當前組數減一所有組數的總分+逆向施測分數+首組分數
+                    score_all_final = get_group_all_score(current_group - 1) + score_all_first + score_all_backward_whole # 總分=當前組數減一所有組數的總分+逆向施測分數+首組分數
                     score_r_final = get_group_r_score(current_group - 1) + score_r_first + score_r_backward
                     score_e_final = get_group_e_score(current_group - 1)+ score_e_first + score_e_backward
                     evaluate_result = evaluate_development(score_all_final, original_group)
@@ -737,14 +741,13 @@ def handle_message(event):
 
 請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
                     
-輸入「返回」回到主選單。
-                    """
+輸入「返回」回到主選單。"""
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                     user_states[user_id] = {"mode": MODE_MAIN_MENU}
                     return
 
                 else: # 如果逆向到第一組則逆向施測分數加上首組分數等於總分
-                    score_all_final = score_all_first + score_all_backward
+                    score_all_final = score_all_first + score_all_backward_whole
                     score_r_final = score_r_first + score_r_backward
                     score_e_final = score_e_first + score_e_backward
                     evaluate_result = evaluate_development(score_all_final, original_group)
@@ -755,8 +758,7 @@ def handle_message(event):
 
 請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
                     
-輸入「返回」回到主選單。
-                    """
+輸入「返回」回到主選單。"""
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                     user_states[user_id] = {"mode": MODE_MAIN_MENU}
                     return
