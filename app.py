@@ -162,13 +162,21 @@ def get_questions_by_age(months):
         print("讀取 Google Sheets 失敗，錯誤訊息：", e)
         return None
 
-def get_min_age_for_group(group):
+def get_min_age_for_group(group): # 記住每組最小年齡
     group_age_mapping = {1: 0, 2: 5, 3: 9, 4: 13, 5: 17, 6: 21, 7: 25, 8: 29, 9: 33}
     return group_age_mapping.get(group, None)  # 若組別無效，回傳 None
 
-def get_group_score(group):
-    group_score_mapping = {1: 5, 2: 5, 3: 5, 4: 5, 5: 6, 6: 6, 7: 6, 8: 6, 9: 6}
-    return group_score_mapping.get(group, None)
+def get_group_all_score(group): # 記住每組別與其之前組別總分
+    group_all_score_mapping = {1: 5, 2: 10, 3: 15, 4: 20, 5: 26, 6: 32, 7: 38, 8: 44, 9: 50}
+    return group_all_score_mapping.get(group, None)
+
+def get_group_r_score(group): # 記住每組別與其之前組別R總分
+    group_r_score_mapping = {1: 3, 2: 6, 3: 9, 4: 12, 5: 16, 6: 18, 7: 21, 8: 23, 9: 24}
+    return group_r_score_mapping.get(group, None)
+
+def get_group_e_score(group): # 記住每組別與其之前組別E總分
+    group_e_score_mapping = {1: 2, 2: 5, 3: 9, 4: 13, 5: 16, 6: 21, 7: 27, 8: 33, 9: 39}
+    return group_e_score_mapping.get(group, None)
 
 # **處理使用者加入 Bot 時的回應**
 @handler.add(FollowEvent)
@@ -270,6 +278,7 @@ def handle_message(event):
                         "score_all_first": 0, "score_r_first": 0, "score_e_first": 0,
                         "score_all_forward":0, "score_r_forward":0 ,"score_e_forward": 0,
                         "score_all_backward":0, "score_r_backward":0 ,"score_e_backward":0,
+                        "score_all_final":0, "score_r_final":0, "score_e_final":0,
                         "group": group,
                         "min_age_in_group": min_age_in_group
                     }
@@ -300,7 +309,7 @@ def handle_message(event):
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
         current_group = int(questions[0]["組別"]) # 取得組別
-        question_number = current_question["題號"] # 取得題號
+        #question_number = current_question["題號"] # 取得題號
         question_type = current_question["類別"] # 取得類別
         hint = current_question["提示"] # 取得提示
         pass_criteria = current_question["通過標準"] # 取得通過標準
@@ -342,7 +351,6 @@ def handle_message(event):
                 score_e_first += 1
                 user_states[user_id]["score_r"] = score_r_first
                 user_states[user_id]["score_e"] = score_e_first
-            print("首組第幾題：", current_index, "現在總分：", score_all_first, "現在R分：", score_r_first, "現在E分：", score_e_first)
             response_text = "了解，現在進入下一題。\n\n"
         elif deepseek_response.startswith("不符合"):
             current_index += 1
@@ -361,6 +369,7 @@ def handle_message(event):
             response_text = "❌無法判斷回應，請再試一次。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
+        print("首組第幾題：", current_index, "現在總分：", score_all_first, "現在R分：", score_r_first, "現在E分：", score_e_first)
         user_states[user_id]["current_index"] = current_index
 
         if current_index < len(questions):
@@ -370,9 +379,6 @@ def handle_message(event):
 
         else:
             pass_percentage = score_all_first / len(questions)  # 計算通過比例
-            user_states[user_id]["score_all_first"] = score_all_first
-            user_states[user_id]["score_r_first"] = score_r_first
-            user_states[user_id]["score_e_first"] = score_e_first
 
             if pass_percentage == 1.0:
                 if current_group < 9:
@@ -392,8 +398,14 @@ def handle_message(event):
                     return
                 else:
                     # 位於最後一個月齡組
-                    print("位於最後一個月齡組，進入計分模式。")
-                    user_states[user_id] = {"mode": MODE_SCORE}
+                    score_all_final = score_all_first + 44 # 第1-8組分數加總為44，加上第9組分數即為總分。
+                    score_r_final = score_r_first + 23 # 第1-8組R分數加總為23，加上第9組R分數即為總分。
+                    score_e_final = score_e_first + 33 # 第1-8組E分數加總為33，加上第9組E分數即為總分。
+                    user_states[user_id]["score_all_final"] = score_all_final
+                    user_states[user_id]["score_r_final"] = score_r_final
+                    user_states[user_id]["score_e_final"] = score_e_final
+                    print("位於最後一個月齡組。總分為：", score_all_final, "R總分為：", score_r_final, "E總分為：", score_e_final, "，進入常模模式。")
+                    user_states[user_id]["mode"] = MODE_SCORE
 
             elif pass_percentage < 1.0:
                 if current_group > 1:
@@ -413,8 +425,14 @@ def handle_message(event):
                     return
                 else:
                     # 位於第一個月齡組
-                    print("位於第一個月齡組，進入計分模式。")
-                    user_states[user_id] = {"mode": MODE_SCORE}
+                    score_all_final = score_all_first # 第1組分數即為總分。
+                    score_r_final = score_r_first # 第1組R分數即為總分。
+                    score_e_final = score_e_first # 第1組E分數即為總分。
+                    user_states[user_id]["score_all_final"] = score_all_final
+                    user_states[user_id]["score_r_final"] = score_r_final
+                    user_states[user_id]["score_e_final"] = score_e_final
+                    print("位於第一個月齡組。總分為：", score_all_final, "R總分為：", score_r_final, "E總分為：", score_e_final, "，進入常模模式。")
+                    user_states[user_id]["mode"] = MODE_SCORE
 
     ## **順向篩檢
     if user_mode == MODE_TESTING_FORWARD:
@@ -429,7 +447,7 @@ def handle_message(event):
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
         current_group = int(questions[0]['組別']) # 取得組別
-        question_number = current_question["題號"] # 取得題號
+        #question_number = current_question["題號"] # 取得題號
         question_type = current_question["類別"] # 取得類別
         hint = current_question["提示"] # 取得提示
         pass_criteria = current_question["通過標準"] # 取得通過標準
@@ -473,7 +491,6 @@ def handle_message(event):
                 score_e_forward += 1
                 user_states[user_id]["score_r"] = score_r_forward
                 user_states[user_id]["score_e"] = score_e_forward
-            print("第", current_group, "組第幾題：", current_index, "現在總分：", score_all_forward, "現在R分：", score_r_forward, "現在E分：", score_e_forward)
             response_text = "了解，現在進入下一題。\n\n"
         elif deepseek_response.startswith("不符合"):
             current_index += 1
@@ -492,6 +509,7 @@ def handle_message(event):
             response_text = "❌無法判斷回應，請再試一次。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
+        print("第", current_group, "組第幾題：", current_index, "現在總分：", score_all_forward, "現在R分：", score_r_forward, "現在E分：", score_e_forward)
         user_states[user_id]["current_index"] = current_index
 
         if current_index < len(questions):
@@ -528,11 +546,14 @@ def handle_message(event):
                     return
 
             else:
-                print("順向篩檢結束，進入計分模式")
-                user_states[user_id]["score_all_forward"] = score_all_forward
-                user_states[user_id]["score_r_forward"] = score_r_forward
-                user_states[user_id]["score_e_forward"] = score_e_forward
-                user_states[user_id] = {"mode": MODE_SCORE}
+                score_all_final = get_group_all_score(current_group - 1) + score_all_forward # 總分=當前組數減一所有組數的總分加上當前組的分數
+                score_r_final = get_group_r_score(current_group - 1) + score_r_forward
+                score_e_final = get_group_e_score(current_group - 1) + score_e_forward
+                user_states[user_id]["score_all_final"] = score_all_final
+                user_states[user_id]["score_r_final"] = score_r_final
+                user_states[user_id]["score_e_final"] = score_e_final
+                print("順向施測至", current_group, "組。總分為：", score_all_final, "R總分為：", score_r_final, "E總分為：", score_e_final, "，進入常模模式。")
+                user_states[user_id]["mode"] = MODE_SCORE
 
     ##逆向篩檢     
     if user_mode == MODE_TESTING_BACKWARD:
@@ -591,7 +612,6 @@ def handle_message(event):
                 score_e_backward += 1
                 user_states[user_id]["score_r"] = score_r_backward
                 user_states[user_id]["score_e"] = score_e_backward
-            print("第", current_group, "組第幾題：", current_index, "現在總分：", score_all_backward, "現在R分：", score_r_backward, "現在E分：", score_e_backward)
             response_text = "了解，現在進入下一題。\n\n"
         elif deepseek_response.startswith("不符合"):
             current_index += 1
@@ -610,6 +630,7 @@ def handle_message(event):
             response_text = "❌無法判斷回應，請再試一次。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
+        print("第", current_group, "組第幾題：", current_index, "現在總分：", score_all_backward, "現在R分：", score_r_backward, "現在E分：", score_e_backward)
         user_states[user_id]["current_index"] = current_index
 
         if current_index < len(questions):
@@ -646,29 +667,24 @@ def handle_message(event):
                     return
 
             else:
-                print("順向篩檢結束，進入計分模式")
-                user_states[user_id]["score_all_backward"] = score_all_backward
-                user_states[user_id]["score_r_backward"] = score_r_backward
-                user_states[user_id]["score_e_backward"] = score_e_backward
-                user_states[user_id] = {"mode": MODE_SCORE}
+                score_all_final = get_group_all_score(current_group - 1) + score_all_backward # 總分=當前組數減一所有組數的總分加上當前組的分數
+                score_r_final = get_group_r_score(current_group - 1) + score_r_backward
+                score_e_final = get_group_e_score(current_group - 1) + score_e_backward
+                user_states[user_id]["score_all_final"] = score_all_final
+                user_states[user_id]["score_r_final"] = score_r_final
+                user_states[user_id]["score_e_final"] = score_e_final
+                print("逆向施測至", current_group, "組。總分為：", score_all_final, "R總分為：", score_r_final, "E總分為：", score_e_final, "，進入常模模式。")
+                user_states[user_id]["mode"] = MODE_SCORE
 
     if user_mode == MODE_SCORE:
+        print("判斷常模")
         state = user_states[user_id]
-        status = state["status"]
-        score_all_first = state["score_all_first"]
-        score_r_first = state["score_r_first"]
-        score_e_first = state["score_e_first"]
-        score_all_forward = state["score_all_forward"]
-        score_r_forward = state["score_r_forward"]
-        score_e_forward = state["score_e_forward"]
-        score_all_backward = state["score_all_backward"]
-        score_r_backward = state["score_r_backward"]
-        score_e_backward = state["score_e_backward"]
+        #status = state["status"]
+        score_all_final = state["score_all_final"]
+        score_r_final = state["score_r_final"]
+        score_e_final = state["score_e_final"]
 
-        response_text = f"""首組總成績：{score_all_first}，首組R成績：{score_r_first}，首組E成績：{score_e_first}
-        順向總成績：{score_all_forward}，順向R成績：{score_r_forward}，順向E成績：{score_e_forward}
-        逆向總成績：{score_all_backward}，逆向R成績：{score_r_backward}，逆向E成績：{score_e_backward}
-        """
+        response_text = f"總成績：{score_all_final}，R成績：{score_r_final}，E成績：{score_e_final}"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
 
