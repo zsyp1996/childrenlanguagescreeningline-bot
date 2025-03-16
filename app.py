@@ -226,7 +226,7 @@ def handle_message(event):
                 user_states[user_id] = {"mode": MODE_MAIN_MENU}
             else:
                 questions = get_questions_by_age(total_months)
-                print(questions) ##
+                print("該月齡組題目資訊為：", questions)
                 if questions:
                     group = questions[0]["組別"]  # 取得題目所屬的組別
                     min_age_in_group = get_min_age_for_group(group)
@@ -235,15 +235,16 @@ def handle_message(event):
                         "mode": MODE_TESTING_FIRST,
                         "questions": questions,
                         "current_index": 0,
-                        "score": 0,
+                        "score_all": 0,
+                        "score_r": 0,
+                        "score_e": 0,
                         "group": group,
                         "min_age_in_group": min_age_in_group
                     }
-                    response_text = f"""
-                    您的孩子目前 {total_months} 個月大，現在開始篩檢。
-                    注意：bot需要時間回應，請在回答完每個問題後稍加等待並盡量避免錯別字，謝謝。
+                    response_text = f"""您的孩子目前 {total_months} 個月大，現在開始篩檢。
+                注意：bot需要時間回應，請在回答完每個問題後稍加等待並盡量避免錯別字，謝謝。
                     
-                    題目：{questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"""
+                題目：{questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"""
 
                 else:
                     response_text = "無法找到適合此年齡的篩檢題目，請確認 Google Sheets 設定是否正確。\n\n輸入「返回」回到主選單。"
@@ -259,26 +260,20 @@ def handle_message(event):
         state = user_states[user_id]
         questions = state["questions"]
         current_index = state["current_index"]
-        score_first = state["score"]
+        score_all_first = state["score_all"]
+        score_r_first = state["score_r"]
+        score_e_first = state["score_e"]
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
-        
-        if questions:
-            current_group = int(questions[0]['組別'])
-        else:
-            response_text = "無法找到符合年齡的題目，請確認資料是否正確。\n\n輸入「返回」回到主選單。"
-            user_states[user_id] = {"mode": MODE_MAIN_MENU}
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
-            return
-        
-        print("原始題組數量：", len(questions))###
-        print("進行原月齡組題組", current_index, score_first)###
+    
+        print("首組數量：", len(questions))###
 
-        # **取得目前這題的題號
-        current_question = questions[current_index]
-        question_number = current_question["題號"]
-        question_type = current_question["類別"]
-        hint = current_question["提示"]
-        pass_criteria = current_question["通過標準"]
+        # **取得目前這題的資料
+        current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
+        current_group = int(questions[0]['組別']) # 取得組別
+        question_number = current_question["題號"] # 取得題號
+        question_type = current_question["類別"] # 取得類別
+        hint = current_question["提示"] # 取得提示
+        pass_criteria = current_question["通過標準"] # 取得通過標準
 
         # **讓 deepseek 根據題目、提示、通過標準來判斷使用者回應
         deepseek_prompt = f"""
@@ -289,21 +284,28 @@ def handle_message(event):
 
         這是兒童語言篩檢的一道測驗題，請根據「題目」、「提示」、「通過標準」來判斷使用者的回答是否符合「通過標準」：
         1. 不清楚：使用者的回答表示對題目疑惑，如使用者說「不知道」「不清楚」，或你認為使用者回答仍不足以判斷。請只回應「不清楚」。
-        2. 符合：使用者的回答符合「通過標準」(不需字句相同)。請只回應「符合」。
-        3. 不符合：使用者的回答並非不清楚且未達到「通過標準」。請只回應「不符合」。
+        2. 符合：使用者的回答符合「通過標準」(不需字句相同)或表示出對題目的肯定。請只回應「符合」。
+        3. 不符合：使用者的回答並非不清楚且未達到「通過標準」或表示出對題目的否定。請只回應「不符合」。
 
         **請務必只回應「符合」、「不符合」或「不清楚」，不要任何額外文字、符號或解釋！**
         """
 
-        print(questions[current_index], hint, pass_criteria, user_message, sep="\n")
+        print(current_question["題目"], hint, pass_criteria, user_message, sep="\n")
         deepseek_response = chat_with_deepseek(deepseek_prompt).strip()
         print(f"deepseek 判斷：{deepseek_response}")  # Debug 記錄 deepseek 回應
 
         # **根據 deepseek 回應處理邏輯
         if deepseek_response.startswith("符合"):
-            score_first += 1
-            user_states[user_id]["score"] = score_first
+            score_all_first += 1
+            user_states[user_id]["score_all"] = score_all_first
             current_index += 1
+            if question_type == "R":
+                score_r_first += 1
+                user_states[user_id]["score_r"] = score_r_first
+            else:
+                score_e_first += 1
+                user_states[user_id]["score_e"] = score_e_first
+            print("第幾題(需+1)：", current_index, "現在總分：", score_all_first, "現在R分：", score_r_first, "現在E分：", score_e_first)
             response_text = "了解，現在進入下一題。\n\n"
         elif deepseek_response.startswith("不符合"):
             current_index += 1
@@ -329,11 +331,9 @@ def handle_message(event):
             response_text += f"題目：{questions[current_index]['題目']}\n\n輸入「返回」可中途退出篩檢。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
-        
-        ##若在最大或最小月齡組會觸發逆向或順向應再修正
 
         else:
-            pass_percentage = score_first / len(questions)  # 計算通過比例
+            pass_percentage = score_all_first / len(questions)  # 計算通過比例
 
             if pass_percentage == 1.0 and current_group < 9:
                 # 進入順向模式
@@ -343,8 +343,10 @@ def handle_message(event):
                 user_states[user_id]["min_age_in_group"] = get_min_age_for_group(current_group + 1)
                 user_states[user_id]["questions"] = get_questions_by_age(get_min_age_for_group(current_group + 1))
                 user_states[user_id]["current_index"] = 0
-                user_states[user_id]["score"] = 0
-                response_text = f"✅ 進入下一個題組（{current_group+1}），請準備。\n\n題目：{user_states[user_id]['questions'][0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
+                user_states[user_id]["score_all"] = 0
+                user_states[user_id]["score_r"] = 0
+                user_states[user_id]["score_e"] = 0
+                response_text = f"進入下一個題組（{current_group+1}）。\n\n題目：{user_states[user_id]['questions'][0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                 return
 
@@ -356,8 +358,10 @@ def handle_message(event):
                 user_states[user_id]["min_age_in_group"] = get_min_age_for_group(current_group - 1)
                 user_states[user_id]["questions"] = get_questions_by_age(get_min_age_for_group(current_group - 1))
                 user_states[user_id]["current_index"] = 0
-                user_states[user_id]["score"] = 0
-                response_text = f"⏪ 逆向施測，回到上一個題組（{current_group-1}）。\n\n題目：{user_states[user_id]['questions'][0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
+                user_states[user_id]["score_all"] = 0
+                user_states[user_id]["score_r"] = 0
+                user_states[user_id]["score_e"] = 0
+                response_text = f"回到上一個題組（{current_group-1}）。\n\n題目：{user_states[user_id]['questions'][0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
                 return
 
