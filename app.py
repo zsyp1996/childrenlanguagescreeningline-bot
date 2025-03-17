@@ -106,6 +106,10 @@ def test_sheets():
     except Exception as e:
         return f"無法讀取 Google Sheets，錯誤訊息：{e}"
     
+#獲取當前日期
+def get_formatted_today():
+    return datetime.now().strftime("%Y-%m-%d")
+
 # **計算年齡函式（用於判斷兒童月齡）**
 def calculate_age(birthdate_str):
     """計算孩子的實足月齡（滿 30 天進位一個月）"""
@@ -288,7 +292,8 @@ def handle_message(event):
                         "score_all": 0, "score_r": 0, "score_e": 0,
                         "original_group": group,
                         "group": group,
-                        "min_age_in_group": min_age_in_group
+                        "min_age_in_group": min_age_in_group,
+                        "wrong_questions" : []
                     }
                     print("進入首組篩檢模式")
                     response_text_1 = f"""您的孩子目前 {total_months} 個月大，請詳閱以下篩檢注意事項。
@@ -329,7 +334,7 @@ def handle_message(event):
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
         current_group = int(questions[0]["組別"]) # 取得組別
-        #question_number = current_question["題號"] # 取得題號
+        question_number = current_question["題號"] # 取得題號
         question_type = current_question["類別"] # 取得類別
         hint = current_question["提示"] # 取得提示
         pass_criteria = current_question["通過標準"] # 取得通過標準
@@ -375,6 +380,7 @@ def handle_message(event):
             response_text = "了解，現在進入下一題。\n\n"
         elif deepseek_response.startswith("不符合"):
             current_index += 1
+            user_states[user_id]["wrong_questions"].append(question_number) # 記錄錯題題號
             response_text = "了解，現在進入下一題。\n\n"
         elif deepseek_response.startswith("不清楚"):
             # 若回答不清楚，提供簡單易懂的提示
@@ -423,10 +429,17 @@ def handle_message(event):
                     #score_r_final = score_r_first + 23 # 第1-8組R分數加總為23，加上第9組R分數即為總分。
                     #score_e_final = score_e_first + 33 # 第1-8組E分數加總為33，加上第9組E分數即為總分。
                     evaluate_result = evaluate_development(score_all_final, original_group)
+                    today = datetime.now().strftime("%Y-%m-%d")
+                    total_months = user_states[user_id]["total_months"]
+                    wrong_questions = user_states[user_id]["wrong_questions"]
+                    sorted_wrong_questions = sorted(wrong_questions, key=lambda x: int(x))
                     response_text = f"""篩檢結束，總分為{score_all_final}分。
 評估結果為：{evaluate_result}。
 
 請記住，本測驗結果僅供參考，不代表真實診斷結果，若有疑慮請聯絡語言治療師。
+若有需要請將此訊息給語言治療師看：
+本次篩檢時間為：{today}，該孩子於此篩檢時月齡為：{total_months}
+錯誤題目為：{sorted_wrong_questions}
                     
 輸入「返回」回到主選單。"""
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -454,10 +467,17 @@ def handle_message(event):
                     #score_r_final = score_r_first # 第1組R分數即為總分。
                     #score_e_final = score_e_first # 第1組E分數即為總分。
                     evaluate_result = evaluate_development(score_all_final, original_group)
+                    today = datetime.now().strftime("%Y-%m-%d")
+                    total_months = user_states[user_id]["total_months"]
+                    wrong_questions = user_states[user_id]["wrong_questions"]
+                    sorted_wrong_questions = sorted(wrong_questions, key=lambda x: int(x))
                     response_text = f"""篩檢結束，總分為{score_all_final}分。
 評估結果為：{evaluate_result}。
 
 請記住，本測驗結果僅供參考，不代表真實診斷結果，若有疑慮請聯絡語言治療師。
+若有需要請將此訊息給語言治療師看：
+本次篩檢時間為：{today}，該孩子於此篩檢時月齡為：{total_months}
+錯誤題目為：{sorted_wrong_questions}
                     
 輸入「返回」回到主選單。"""
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -484,6 +504,7 @@ def handle_message(event):
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
         current_group = int(questions[0]['組別']) # 取得組別
+        question_number = current_question["題號"] # 取得題號
         question_type = current_question["類別"] # 取得類別
         hint = current_question["提示"] # 取得提示
         pass_criteria = current_question["通過標準"] # 取得通過標準
@@ -531,6 +552,7 @@ def handle_message(event):
             response_text = "了解，現在進入下一題。\n\n"
         elif deepseek_response.startswith("不符合"):
             current_index += 1
+            user_states[user_id]["wrong_questions"].append(question_number)
             response_text = "了解，現在進入下一題。\n\n"
         elif deepseek_response.startswith("不清楚"):
             # **若回答不清楚，提供簡單易懂的提示
@@ -570,7 +592,8 @@ def handle_message(event):
                         "questions": new_questions,
                         "current_index": 0,
                         "score_all_current":0,
-                        "score_all": score_all_forward_whole, "score_r": score_r_forward, "score_e": score_e_forward
+                        "score_all": score_all_forward_whole, "score_r": score_r_forward, "score_e": score_e_forward,
+                        "wrong_questions": user_states[user_id]["wrong_questions"]
                     })
                     response_text = f"題目：{new_questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -586,10 +609,17 @@ def handle_message(event):
                 #score_r_final = get_group_r_score(original_group) + score_r_forward
                 #score_e_final = get_group_e_score(original_group) + score_e_forward
                 evaluate_result = evaluate_development(score_all_final, original_group)
+                today = datetime.now().strftime("%Y-%m-%d")
+                total_months = user_states[user_id]["total_months"]
+                wrong_questions = user_states[user_id]["wrong_questions"]
+                sorted_wrong_questions = sorted(wrong_questions, key=lambda x: int(x))
                 response_text = f"""篩檢結束，總分為{score_all_final}分。
 評估結果為：{evaluate_result}。
 
 請記住，本測驗結果僅供參考，不代表真實診斷結果，若有疑慮請聯絡語言治療師。
+若有需要請將此訊息給語言治療師看：
+本次篩檢時間為：{today}，該孩子於此篩檢時月齡為：{total_months}
+錯誤題目為：{sorted_wrong_questions}
                 
 輸入「返回」回到主選單。"""
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -616,6 +646,7 @@ def handle_message(event):
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
         current_group = int(questions[0]['組別']) # 取得組別
+        question_number = current_question["題號"] # 取得題號
         question_type = current_question["類別"] # 取得類別
         hint = current_question["提示"] # 取得提示
         pass_criteria = current_question["通過標準"] # 取得通過標準
@@ -663,6 +694,7 @@ def handle_message(event):
             response_text = "了解，現在進入下一題。\n\n"
         elif deepseek_response.startswith("不符合"):
             current_index += 1
+            user_states[user_id]["wrong_questions"].append(question_number)
             response_text = "了解，現在進入下一題。\n\n"
         elif deepseek_response.startswith("不清楚"):
             # **若回答不清楚，提供簡單易懂的提示
@@ -702,7 +734,8 @@ def handle_message(event):
                         "questions": new_questions,
                         "current_index": 0,
                         "score_all_current": 0,
-                        "score_all": score_all_backward_whole, "score_r": score_r_backward, "score_e": score_e_backward
+                        "score_all": score_all_backward_whole, "score_r": score_r_backward, "score_e": score_e_backward,
+                        "wrong_questions": user_states[user_id]["wrong_questions"]
                     })
                     response_text = f"題目：{new_questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -720,10 +753,17 @@ def handle_message(event):
                     #score_r_final = get_group_r_score(current_group - 1) + score_r_backward
                     #score_e_final = get_group_e_score(current_group - 1) + score_e_backward
                     evaluate_result = evaluate_development(score_all_final, original_group)
+                    today = datetime.now().strftime("%Y-%m-%d")
+                    total_months = user_states[user_id]["total_months"]
+                    wrong_questions = user_states[user_id]["wrong_questions"]
+                    sorted_wrong_questions = sorted(wrong_questions, key=lambda x: int(x))
                     response_text = f"""篩檢結束，總分為{score_all_final}分。
 評估結果為：{evaluate_result}。
 
 請記住，本測驗結果僅供參考，不代表真實診斷結果，若有疑慮請聯絡語言治療師。
+若有需要請將此訊息給語言治療師看：
+本次篩檢時間為：{today}，該孩子於此篩檢時月齡為：{total_months}
+錯誤題目為：{sorted_wrong_questions}
                     
 輸入「返回」回到主選單。"""
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -735,10 +775,17 @@ def handle_message(event):
                     #score_r_final = score_r_backward
                     #score_e_final = score_e_backward
                     evaluate_result = evaluate_development(score_all_final, original_group)
+                    today = datetime.now().strftime("%Y-%m-%d")
+                    total_months = user_states[user_id]["total_months"]
+                    wrong_questions = user_states[user_id]["wrong_questions"]
+                    sorted_wrong_questions = sorted(wrong_questions, key=lambda x: int(x))
                     response_text = f"""篩檢結束，總分為{score_all_final}分。
 評估結果為：{evaluate_result}。
 
 請記住，本測驗結果僅供參考，不代表真實診斷結果，若有疑慮請聯絡語言治療師。
+若有需要請將此訊息給語言治療師看：
+本次篩檢時間為：{today}，該孩子於此篩檢時月齡為：{total_months}
+錯誤題目為：{sorted_wrong_questions}
                     
 輸入「返回」回到主選單。"""
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
