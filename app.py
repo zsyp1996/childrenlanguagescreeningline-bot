@@ -328,8 +328,8 @@ def handle_message(event):
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
         
         # 回覆使用者收到訊息並等待
-        response_text = "已收到回覆，請等待AI回應，等待過程中請勿再發送訊息。"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+        response_text_wait = "已收到回覆，請等待AI回應，等待過程中請勿再發送訊息。"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text_wait))
 
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
@@ -498,8 +498,8 @@ def handle_message(event):
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
 
         # 回覆使用者收到訊息並等待
-        response_text = "已收到回覆，請等待AI回應，等待過程中請勿再發送訊息。"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+        response_text_wait = "已收到回覆，請等待AI回應，等待過程中請勿再發送訊息。"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text_wait))
 
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
@@ -640,8 +640,8 @@ def handle_message(event):
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
 
         # 回覆使用者收到訊息並等待
-        response_text = "已收到回覆，請等待AI回應，等待過程中請勿再發送訊息。"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
+        response_text_wait = "已收到回覆，請等待AI回應，等待過程中請勿再發送訊息。"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text_wait))
 
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
