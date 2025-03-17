@@ -297,12 +297,17 @@ def handle_message(event):
                     }
                     print("進入首組篩檢模式")
                     response_text_1 = f"""您的孩子目前 {total_months} 個月大，請詳閱以下篩檢注意事項。
+
 1.您可以使用「可以」、「不可以」回應，也能描述孩子狀況交由AI判斷。如：
 題目：「當您對孩子說『不行』時，他會停下來嗎？」
 回應示範：「他會看著我，但停不停下來要看他心情。」
+
 2.若您不確定題目意思時，請回覆「不清楚」，AI會提供說明。
+
 3.由於AI需要時間回應，請回答完後稍加等待並避免再次傳送訊息。
+
 4.請盡量完成所有題目，如需中斷請輸入「返回」。
+
 5.本測驗僅供參考，不代表正式診斷結果，如有疑慮請諮詢語言治療師。"""
                     response_text_2 = f"現在開始篩檢，請回答以下題目。\n題目：{questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
                     line_bot_api.reply_message(event.reply_token, [TextSendMessage(text=response_text_1), TextSendMessage(text=response_text_2)])
