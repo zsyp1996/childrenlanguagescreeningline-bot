@@ -334,7 +334,8 @@ def handle_message(event):
         
         # 回覆使用者收到訊息並等待
         response_text_wait = "已收到回覆，請等待AI回應，等待過程中請勿再發送訊息。"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text_wait))
+        user_id = event.source.user_id  # 取得使用者 LINE ID
+        line_bot_api.push_message(user_id, TextSendMessage(text=response_text_wait))
 
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
@@ -362,7 +363,7 @@ def handle_message(event):
         """
 
         deepseek_response = chat_with_deepseek(deepseek_prompt).strip()
-        print(f"現在題目：{current_question['題目']}\n提示：{hint}\n通過標準{pass_criteria}\n使用者回覆{user_message}\ndeepseek判斷：{deepseek_response}")  # Debug記錄deepseek回應
+        print(f"現在題目：{current_question['題目']}\n提示：{hint}\n通過標準：{pass_criteria}\n使用者回覆：{user_message}\ndeepseek判斷：{deepseek_response}")  # Debug記錄deepseek回應
 
         # **根據 deepseek 回應處理邏輯
         if deepseek_response.startswith("符合"):
@@ -504,7 +505,9 @@ def handle_message(event):
 
         # 回覆使用者收到訊息並等待
         response_text_wait = "已收到回覆，請等待AI回應，等待過程中請勿再發送訊息。"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text_wait))
+        user_id = event.source.user_id  # 取得使用者 LINE ID
+        line_bot_api.push_message(user_id, TextSendMessage(text=response_text_wait))
+
 
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
@@ -532,7 +535,7 @@ def handle_message(event):
         """
 
         deepseek_response = chat_with_deepseek(deepseek_prompt).strip()
-        print(f"現在題目：{current_question['題目']}\n提示：{hint}\n通過標準{pass_criteria}\n使用者回覆{user_message}\ndeepseek判斷：{deepseek_response}")  # Debug記錄deepseek回應
+        print(f"現在題目：{current_question['題目']}\n提示：{hint}\n通過標準：{pass_criteria}\n使用者回覆：{user_message}\ndeepseek判斷：{deepseek_response}")  # Debug記錄deepseek回應
 
         # **根據 deepseek 回應處理邏輯
         if deepseek_response.startswith("符合"):
@@ -646,7 +649,8 @@ def handle_message(event):
 
         # 回覆使用者收到訊息並等待
         response_text_wait = "已收到回覆，請等待AI回應，等待過程中請勿再發送訊息。"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text_wait))
+        user_id = event.source.user_id  # 取得使用者 LINE ID
+        line_bot_api.push_message(user_id, TextSendMessage(text=response_text_wait))
 
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
