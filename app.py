@@ -204,21 +204,6 @@ def get_group_e_score(group): # 記住每組別與其之前組別E總分
     group_e_score_mapping = {1: 2, 2: 5, 3: 9, 4: 13, 5: 16, 6: 21, 7: 27, 8: 33, 9: 39}
     return group_e_score_mapping.get(group, None)
 
-# **處理使用者加入 Bot 時的回應**
-@handler.add(FollowEvent)
-def handle_follow(event):
-    """使用者加入時，發送歡迎訊息並請求輸入孩子出生年月日"""
-    welcome_message = """🎉 歡迎來到 **兒童語言篩檢 BOT**！
-請選擇您需要的功能，輸入對應的關鍵字開始：
-🔹 **篩檢** → 進行兒童語言發展篩檢
-🔹 **提升** → 獲取語言發展建議
-🔹 **我想治療** → 查找附近語言治療服務
-
-⚠️ 若要進行篩檢，請輸入「篩檢」開始測驗。
-⚠️ 若輸入其他內容，BOT會重複此訊息。"""
-    
-    line_bot_api.reply_message(event.reply_token,TextSendMessage(text=welcome_message))
-
 # **追蹤使用者狀態（模式），這裡用字典模擬（正式可用資料庫）
 user_states = {}
 
@@ -246,7 +231,7 @@ def handle_message(event):
     # **返回主選單
     if user_message == "返回":
         user_states[user_id] = {"mode": MODE_MAIN_MENU}
-        response_text = "✅ 已返回主選單。\n\n請選擇功能：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
+        response_text = "已返回主選單。\n\n若想重新進行兒童語言篩檢，請輸入「篩檢」。"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
 
@@ -257,12 +242,12 @@ def handle_message(event):
             response_text = "請提供孩子的西元出生年月日（格式：YYYY-MM-DD），以便開始語言篩檢。\n注意：需為西元出生年月日，且「-」必不可少。\n\n輸入「返回」回到主選單。"
         elif user_message == "提升":
             user_states[user_id] = {"mode": MODE_TIPS}
-            response_text = "幼兒語言發展建議：\n- 與孩子多對話，描述日常事物。\n- 用簡單但完整的句子與孩子交流。\n- 讀繪本、唱童謠、玩互動遊戲來促進語言學習。\n\n輸入「返回」回到主選單。"
-        elif user_message == "我想治療":
+            response_text = "提升語言能力功能待開發，若造成不便敬請見諒。\n\n輸入「返回」回到主選單。"
+        elif user_message == "治療":
             user_states[user_id] = {"mode": MODE_TREATMENT}
-            response_text = "語言治療機構資訊：請搜尋官方語言治療機構網站，或聯絡當地醫療院所。\n\n輸入「返回」回到主選單。"
+            response_text = "提供語言治療場所功能待開發，若造成不便敬請見諒。\n\n輸入「返回」回到主選單。"
         else:
-            response_text = "❌無效指令，請輸入：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
+            response_text = "無效指令。\n\n若想進行兒童語言篩檢，請輸入「篩檢」。"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
 
@@ -270,7 +255,7 @@ def handle_message(event):
     if user_mode in [MODE_TIPS, MODE_TREATMENT]:
         if user_message == "返回":
             user_states[user_id] = {"mode": MODE_MAIN_MENU}
-            response_text = "✅已返回主選單。\n\n請選擇功能：\n- 「篩檢」開始語言篩檢\n- 「提升」獲取語言發展建議\n- 「我想治療」獲取語言治療資源"
+            response_text = "已返回主選單。\n\n若想進行兒童語言篩檢，請輸入「篩檢」。"
         else:
             response_text = "輸入「返回」回到主選單。"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -285,7 +270,7 @@ def handle_message(event):
             total_months = calculate_age(str(birth_date))
 
             if total_months > 36:
-                response_text = "本篩檢僅適用於三歲以下兒童，若您的孩子超過 36 個月，建議聯絡語言治療師進行進一步評估。\n\n輸入「返回」回到主選單。"
+                response_text = "本篩檢僅適用於三歲以下兒童，若您的孩子月齡超過36個月，建議聯絡語言治療師進行進一步評估。\n\n輸入「返回」回到主選單。"
                 user_states[user_id] = {"mode": MODE_MAIN_MENU}
             else:
                 questions = get_questions_by_age(total_months)
@@ -305,25 +290,29 @@ def handle_message(event):
                         "group": group,
                         "min_age_in_group": min_age_in_group
                     }
-                    response_text = f"""您的孩子目前 {total_months} 個月大，現在開始篩檢。
-注意：bot需要時間回應，請在回答完每個問題後稍加等待並不要再次純送訊息。請盡量避免錯別字，謝謝。
-
-題目：{questions[0]['題目']}
-
-輸入「返回」可中途退出篩檢。"""
-
+                    print("進入首組篩檢模式")
+                    response_text_1 = f"""您的孩子目前 {total_months} 個月大，請詳閱以下篩檢注意事項。
+1.您可以使用「可以」、「不可以」回應，也能描述孩子狀況交由AI判斷。如：
+題目：「當您對孩子說『不行』時，他會停下來嗎？」
+回應示範：「他會看著我，但停不停下來要看他心情。」
+2.若您不確定題目意思時，請回覆「不清楚」，AI會提供說明。
+3.由於AI需要時間回應，請回答完後稍加等待並避免再次傳送訊息。
+4.請盡量完成所有題目，如需中斷請輸入「返回」。
+5.本測驗僅供參考，不代表正式診斷結果，如有疑慮請諮詢語言治療師。"""
+                    response_text_2 = f"現在開始篩檢，請回答以下題目。\n題目：{questions[0]['題目']}\n\n輸入「返回」可中途退出篩檢。"
+                    line_bot_api.reply_message(event.reply_token, [TextSendMessage(text=response_text_1), TextSendMessage(text=response_text_2)])
+                    return
                 else:
                     response_text = "無法找到適合此年齡的篩檢題目，請確認 Google Sheets 設定是否正確。\n\n輸入「返回」回到主選單。"
                     user_states[user_id] = {"mode": MODE_MAIN_MENU}
         else:
-            response_text = "若要進行語言篩檢，請提供有效的西元出生日期（YYYY-MM-DD），例如 2020-08-15。\n\n輸入「返回」回到主選單。"
+            response_text = "請提供孩子的「西元」出生年月日（格式：YYYY-MM-DD），並且「-」不可省略，例如 2020-08-15。\n\n輸入「返回」回到主選單。"
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
         return
 
     # **首組篩檢
     if user_mode == MODE_TESTING_FIRST:
-        print("進入首組篩檢模式")
         state = user_states[user_id]
         questions = state["questions"]
         current_index = state["current_index"]
@@ -332,6 +321,10 @@ def handle_message(event):
         score_e_first = state["score_e"]
         original_group = state["original_group"]
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
+        
+        # 回覆使用者收到訊息並等待
+        response_text = "已收到回覆，請等待AI回應，等待過程中請勿再發送訊息。"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
 
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
@@ -341,6 +334,8 @@ def handle_message(event):
         hint = current_question["提示"] # 取得提示
         pass_criteria = current_question["通過標準"] # 取得通過標準
 
+        print("第", current_group, "組數量：", len(questions))###
+
         # **讓 deepseek 根據題目、提示、通過標準來判斷使用者回應
         deepseek_prompt = f"""
         題目：{current_question["題目"]}
@@ -349,16 +344,15 @@ def handle_message(event):
         使用者回應：{user_message}
 
         這是兒童語言篩檢的一道測驗題，請根據「題目」、「提示」、「通過標準」來判斷使用者的回答是否符合「通過標準」：
-        1. 不清楚：使用者的回答表示對題目疑惑，如使用者說「不知道」「不清楚」，或你認為使用者回答仍不足以判斷。請只回應「不清楚」。
+        1. 不清楚：使用者的回答表示對題目疑惑，如使用者說「不清楚」，或你認為使用者回答仍不足以判斷。請只回應「不清楚」。
         2. 符合：使用者的回答符合「通過標準」(不需字句相同)或表示出對題目的肯定。請只回應「符合」。
         3. 不符合：使用者的回答並非不清楚且未達到「通過標準」或表示出對題目的否定。請只回應「不符合」。
 
-        **請務必只回應「符合」、「不符合」或「不清楚」，不要任何額外文字、符號或解釋！**
+        請務必只回應「符合」、「不符合」或「不清楚」，不要任何額外文字、符號或解釋。
         """
 
-        print(current_question["題目"], hint, pass_criteria, user_message, sep="\n")
         deepseek_response = chat_with_deepseek(deepseek_prompt).strip()
-        print(f"deepseek 判斷：{deepseek_response}")  # Debug 記錄 deepseek 回應
+        print(f"現在題目：{current_question['題目']}\n提示：{hint}\n通過標準{pass_criteria}\n使用者回覆{user_message}\ndeepseek判斷：{deepseek_response}")  # Debug記錄deepseek回應
 
         # **根據 deepseek 回應處理邏輯
         if deepseek_response.startswith("符合"):
@@ -389,14 +383,14 @@ def handle_message(event):
             題目：{current_question['題目']}，例子：{hint}
             """
             hint_response = chat_with_deepseek(hint_prompt).strip()
-            response_text = f"{hint_response}\n請再回覆一次。"
+            response_text = f"{hint_response}\n請再次回應問題。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
         else:
-            response_text = "❌無法判斷回應，請再試一次。"
+            response_text = "程式出現錯誤無法判斷回應，請聯絡負責人。"
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
             return
-        print("首組第幾題：", current_index, "現在總分：", score_all_first, "現在R分：", score_r_first, "現在E分：", score_e_first)
+        print(f"首組第{current_index}題，現在總分：{score_all_first}，現在R分{score_r_first}，現在E分{score_e_first}")
         user_states[user_id]["current_index"] = current_index
 
         if current_index < len(questions):
@@ -426,15 +420,13 @@ def handle_message(event):
                 else:
                     # 位於最後一個月齡組
                     score_all_final = score_all_first + 44 # 第1-8組分數加總為44，加上第9組分數即為總分。
-                    score_r_final = score_r_first + 23 # 第1-8組R分數加總為23，加上第9組R分數即為總分。
-                    score_e_final = score_e_first + 33 # 第1-8組E分數加總為33，加上第9組E分數即為總分。
+                    #score_r_final = score_r_first + 23 # 第1-8組R分數加總為23，加上第9組R分數即為總分。
+                    #score_e_final = score_e_first + 33 # 第1-8組E分數加總為33，加上第9組E分數即為總分。
                     evaluate_result = evaluate_development(score_all_final, original_group)
                     response_text = f"""篩檢結束，總分為{score_all_final}分。
-理解性分數為{score_r_final}分。
-表達性分數為{score_e_final}分。
 評估結果為：{evaluate_result}。
 
-請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+請記住，本測驗結果僅供參考，不代表真實診斷結果，若有疑慮請聯絡語言治療師。
                     
 輸入「返回」回到主選單。"""
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -459,15 +451,13 @@ def handle_message(event):
                 else:
                     # 位於第一個月齡組
                     score_all_final = score_all_first # 第1組分數即為總分。
-                    score_r_final = score_r_first # 第1組R分數即為總分。
-                    score_e_final = score_e_first # 第1組E分數即為總分。
+                    #score_r_final = score_r_first # 第1組R分數即為總分。
+                    #score_e_final = score_e_first # 第1組E分數即為總分。
                     evaluate_result = evaluate_development(score_all_final, original_group)
                     response_text = f"""篩檢結束，總分為{score_all_final}分。
-理解性分數為{score_r_final}分。
-表達性分數為{score_e_final}分。
 評估結果為：{evaluate_result}。
 
-請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+請記住，本測驗結果僅供參考，不代表真實診斷結果，若有疑慮請聯絡語言治療師。
                     
 輸入「返回」回到主選單。"""
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -486,6 +476,10 @@ def handle_message(event):
         score_e_forward = state["score_e"]
         original_group = state["original_group"]
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
+
+        # 回覆使用者收到訊息並等待
+        response_text = "已收到回覆，請等待AI回應，等待過程中請勿再發送訊息。"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
 
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
@@ -511,9 +505,8 @@ def handle_message(event):
         **請務必只回應「符合」、「不符合」或「不清楚」，不要任何額外文字、符號或解釋！**
         """
 
-        print(current_question["題目"], hint, pass_criteria, user_message, sep="\n")
         deepseek_response = chat_with_deepseek(deepseek_prompt).strip()
-        print(f"deepseek 判斷：{deepseek_response}")  # Debug 記錄 deepseek 回應
+        print(f"現在題目：{current_question['題目']}\n提示：{hint}\n通過標準{pass_criteria}\n使用者回覆{user_message}\ndeepseek判斷：{deepseek_response}")  # Debug記錄deepseek回應
 
         # **根據 deepseek 回應處理邏輯
         if deepseek_response.startswith("符合"):
@@ -590,15 +583,13 @@ def handle_message(event):
 
             else:
                 score_all_final = get_group_all_score(original_group) + score_all_forward_whole # 總分=當前組數減一所有組數的總分加上當前組的分數
-                score_r_final = get_group_r_score(original_group) + score_r_forward
-                score_e_final = get_group_e_score(original_group) + score_e_forward
+                #score_r_final = get_group_r_score(original_group) + score_r_forward
+                #score_e_final = get_group_e_score(original_group) + score_e_forward
                 evaluate_result = evaluate_development(score_all_final, original_group)
                 response_text = f"""篩檢結束，總分為{score_all_final}分。
-理解性分數為{score_r_final}分。
-表達性分數為{score_e_final}分。
 評估結果為：{evaluate_result}。
 
-請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+請記住，本測驗結果僅供參考，不代表真實診斷結果，若有疑慮請聯絡語言治療師。
                 
 輸入「返回」回到主選單。"""
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -617,6 +608,10 @@ def handle_message(event):
         score_e_backward = state["score_e"]
         original_group = state["original_group"]
         min_age_in_group = state["min_age_in_group"]  # 該組最小月齡
+
+        # 回覆使用者收到訊息並等待
+        response_text = "已收到回覆，請等待AI回應，等待過程中請勿再發送訊息。"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
 
         # **取得目前這題的資料
         current_question = questions[current_index] # 取得該題所有資料包含組別、題號、題目、類別、提示、通過標準
@@ -642,9 +637,8 @@ def handle_message(event):
         **請務必只回應「符合」、「不符合」或「不清楚」，不要任何額外文字、符號或解釋！**
         """
 
-        print(current_question["題目"], hint, pass_criteria, user_message, sep="\n")
         deepseek_response = chat_with_deepseek(deepseek_prompt).strip()
-        print(f"deepseek 判斷：{deepseek_response}")  # Debug 記錄 deepseek 回應
+        print(f"現在題目：{current_question['題目']}\n提示：{hint}\n通過標準{pass_criteria}\n使用者回覆{user_message}\ndeepseek判斷：{deepseek_response}")  # Debug記錄deepseek回應
 
         # **根據 deepseek 回應處理邏輯
         if deepseek_response.startswith("符合"):
@@ -723,15 +717,13 @@ def handle_message(event):
             else:
                 if current_group > 1: # 確保如果逆向到第一組current_group - 1不會等於零
                     score_all_final = get_group_all_score(current_group - 1) + score_all_backward_whole # 總分=當前組數減一所有組數的總分+逆向施測分數+首組分數
-                    score_r_final = get_group_r_score(current_group - 1) + score_r_backward
-                    score_e_final = get_group_e_score(current_group - 1) + score_e_backward
+                    #score_r_final = get_group_r_score(current_group - 1) + score_r_backward
+                    #score_e_final = get_group_e_score(current_group - 1) + score_e_backward
                     evaluate_result = evaluate_development(score_all_final, original_group)
                     response_text = f"""篩檢結束，總分為{score_all_final}分。
-理解性分數為{score_r_final}分。
-表達性分數為{score_e_final}分。
 評估結果為：{evaluate_result}。
 
-請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+請記住，本測驗結果僅供參考，不代表真實診斷結果，若有疑慮請聯絡語言治療師。
                     
 輸入「返回」回到主選單。"""
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
@@ -740,15 +732,13 @@ def handle_message(event):
 
                 else: # 如果逆向到第一組則逆向施測分數加上首組分數等於總分
                     score_all_final = score_all_backward_whole
-                    score_r_final = score_r_backward
-                    score_e_final = score_e_backward
+                    #score_r_final = score_r_backward
+                    #score_e_final = score_e_backward
                     evaluate_result = evaluate_development(score_all_final, original_group)
                     response_text = f"""篩檢結束，總分為{score_all_final}分。
-理解性分數為{score_r_final}分。
-表達性分數為{score_e_final}分。
 評估結果為：{evaluate_result}。
 
-請記住，測驗結果僅供參考，若有疑問請聯絡語言治療師。
+請記住，本測驗結果僅供參考，不代表真實診斷結果，若有疑慮請聯絡語言治療師。
                     
 輸入「返回」回到主選單。"""
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response_text))
